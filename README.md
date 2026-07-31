@@ -2,7 +2,7 @@
 
 ![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
 
-Mineradio 是一款 Windows 桌面沉浸式音乐播放器，把搜索播放、歌词舞台、粒子视觉、3D 歌单架和完整桌面模式组合成一个更接近现场感的私人音乐空间。
+Mineradio 是一款 Windows 桌面沉浸式音乐播放器，把 Navidrome / 本地媒体库、歌词舞台、粒子视觉、3D 歌单架和完整桌面模式组合成一个更接近现场感的私人音乐空间。
 
 ## 立即下载 Windows 安装包
 
@@ -50,18 +50,20 @@ Mineradio 2.0 重新整理了视觉层次、桌面模式、主页与搜索体验
 - 支持本地 MP4 与 Wallpaper Engine 视觉内容
 - 播放后切换到 Emily / 默认播放态视觉，歌词舞台与粒子舞台同步工作
 - 基于节奏的电影镜头视觉系统
-- 面向长播客和 DJ 曲目的专属视觉模式
 - 歌词舞台、自定义歌词、歌词位置与视觉控制
 - 自定义专辑封面上传与裁剪
 - 右键唤起 3D 歌单架，支持歌单队列浏览
-- 网易云音乐账号、搜索、歌单、播客等体验接入
-- QQ 音乐搜索、登录态与音源补充接入
+- Navidrome（Subsonic/OpenSubsonic）搜索、歌单、收藏、歌词和播放
+- Navidrome 多账号切换；密码由 Electron `safeStorage` 加密保存
+- 本地单曲/文件夹导入；桌面版可递归扫描标签、封面、LRC 并自动生成歌单
 - GitHub Releases 更新检测与下载入口
 - 首次启动内置「默认测试」视觉用户存档，软件内默认视觉参数与该存档一致
 
 ## 使用说明
 
 Windows 用户可以从本页列出的夸克盘、百度云、蓝奏云或 GitHub Release 下载安装包。
+
+首次打开后点击右上角“音乐库设置”：填写 Navidrome 的 HTTPS 地址、用户名和密码，测试连接后保存即可。地址填写站点根地址即可，例如 `https://music.example.com`，不需要手动追加 `/rest`。也可以只选择本地音乐文件夹；应用会递归扫描 MP3、FLAC、M4A、OGG、WAV 等格式，并按目录和专辑生成只读歌单。密码不会写入前端或普通配置文件。
 
 正式分发以 `Mineradio-2.0.3-Setup.exe` 为准，不建议直接使用 `win-unpacked` 目录。安装包会创建桌面快捷方式。
 
@@ -77,21 +79,36 @@ npm run build:win
 
 桌面版入口由 Electron 主进程加载本地服务。`npm run build:win` 会生成 Windows NSIS 安装包，产物位于 `dist/`。
 
+### 在 GitHub 上编译 Windows 安装包
+
+仓库内置了 `.github/workflows/windows-build.yml`。它不会在每次普通提交时自动运行，只会在 Actions 页面手动运行，或推送 `v*` 标签时运行。
+
+手动编译：打开仓库的 `Actions` → `Windows Build` → `Run workflow`，选择包含最新代码的分支并确认。任务完成后打开该次运行，在 `Artifacts` 下载 `Mineradio-Windows-...`，解压后运行其中的 `Mineradio-*-Setup.exe`。Artifact 默认保留 14 天。
+
+也可以在本地提交并推送一个版本标签来触发构建，例如：
+
+```bash
+git tag v2.0.4
+git push origin v2.0.4
+```
+
+工作流只上传构建产物，不会自动创建 GitHub Release，也不会上传 Navidrome 地址、账号、密码或本地音乐文件。
+
 ## 更新机制
 
 Mineradio 会请求 GitHub Releases latest 检测新版本。远端版本高于本地版本时，应用内更新入口会展示 Release 内容，并通过系统浏览器打开可选网盘线路；即使 Release 附带完整安装包，`2.0.3+` 客户端也不会读取、下载、缓存或应用该附件与补丁。
 
 本地验证更新链路时，可以通过 `MINERADIO_UPDATE_MANIFEST` 指向一个本地 manifest JSON 或 HTTP 地址来模拟线上 Release。
 
-## 第三方音乐平台说明
+## 历史平台兼容代码说明
 
-Mineradio 不是网易云音乐、QQ 音乐或腾讯音乐娱乐集团的官方客户端，也不隶属于任何音乐平台。
+当前发行版默认使用个人 Navidrome / 本地媒体库，不要求网易云音乐、QQ 音乐等账号，也不会在界面展示这些登录入口或播客入口。
 
-项目中的第三方平台接入仅用于个人学习、本地客户端体验和用户自有账号的播放辅助。请遵守对应平台的用户协议、版权规则和会员权益规则。项目不会提供绕过付费、绕过会员、破解音质或重新分发音乐内容的能力。
+仓库中保留的旧平台后端仅用于迁移兼容；只有显式设置 `MINERADIO_LIBRARY_ONLY=0` 时才会重新开放旧路由。项目不会提供绕过付费、绕过会员、破解音质或重新分发音乐内容的能力。
 
 ## 用户数据与隐私
 
-登录 Cookie、搜索历史、自定义封面、自定义歌词、节奏分析缓存等数据只应保存在本机用户数据目录或浏览器本地存储中，不应提交到仓库。
+Navidrome 账号配置、加密凭据、本地媒体库索引、登录 Cookie、搜索历史、自定义封面、自定义歌词、节奏分析缓存等数据只应保存在本机用户数据目录或浏览器本地存储中，不应提交到仓库。播放请求由本地服务代理到你配置的 HTTPS Navidrome 地址。
 
 更多说明见 [PRIVACY.md](./PRIVACY.md)。
 

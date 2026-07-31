@@ -1,5 +1,5 @@
 // ============================================================
-var AUDIO_UPLOAD_EXT_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i;
+var AUDIO_UPLOAD_EXT_RE = /\.(mp3|flac|wav|ogg|oga|m4a|aac|opus|webm)$/i;
 var IMAGE_UPLOAD_EXT_RE = /\.(jpg|jpeg|png|webp)$/i;
 function isAudioUploadFile(file) {
   if (!file) return false;

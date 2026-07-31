@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer, safeStorage } = require('electron');
 const net = require('net');
 const http = require('http');
 const path = require('path');
@@ -23,6 +23,7 @@ const {
   qishuiDiscoveryErrorCode,
 } = require('./qishui-local-session-discovery');
 const { extractKugouAuth } = require('../kugou-api');
+const { NavidromeClient, normalizeConfig: normalizeNavidromeConfig, publicConfig: publicNavidromeConfig } = require('../navidrome-api');
 const {
   getQishuiOAuthConfig,
   buildQishuiOAuthAuthorizeUrl,
@@ -117,6 +118,9 @@ const STARTUP_HTTP_TIMEOUT_MS = 8000;
 const STARTUP_NAVIGATION_TIMEOUT_MS = 15000;
 const STARTUP_SHOW_WATCHDOG_MS = 3500;
 const CACHE_SETTINGS_FILE = 'cache-settings.json';
+const NAVIDROME_PROFILES_FILE = 'navidrome-profiles.json';
+const LOCAL_LIBRARY_INDEX_FILE = 'local-library.json';
+const LOCAL_LIBRARY_CACHE_DIR = 'local-library-cache';
 const LYRIC_CACHE_VERSION = 1;
 const LYRIC_CACHE_MAX_BYTES = 96 * 1024 * 1024;
 const LYRIC_CACHE_ENTRY_MAX_BYTES = 1024 * 1024;
@@ -332,6 +336,168 @@ function writeCacheSettings(settings) {
   fs.writeFileSync(tempFile, JSON.stringify(normalized, null, 2), 'utf8');
   fs.renameSync(tempFile, file);
   return normalized;
+}
+
+function navidromeProfilesPath() {
+  return path.join(app.getPath('userData'), NAVIDROME_PROFILES_FILE);
+}
+
+function navidromeSecretAvailable() {
+  try { return !!safeStorage && safeStorage.isEncryptionAvailable(); } catch (_) { return false; }
+}
+
+function encryptNavidromeSecret(secret) {
+  if (!navidromeSecretAvailable()) {
+    const error = new Error('当前系统尚未提供 Electron 安全存储');
+    error.code = 'NAVIDROME_SAFE_STORAGE_UNAVAILABLE';
+    throw error;
+  }
+  return safeStorage.encryptString(JSON.stringify({
+    password: String(secret && secret.password || ''),
+    token: String(secret && secret.token || ''),
+    salt: String(secret && secret.salt || ''),
+    apiKey: String(secret && secret.apiKey || ''),
+  })).toString('base64');
+}
+
+function decryptNavidromeSecret(encoded) {
+  if (!encoded || !navidromeSecretAvailable()) return {};
+  try {
+    const raw = safeStorage.decryptString(Buffer.from(String(encoded), 'base64'));
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) { return {}; }
+}
+
+function readNavidromeProfilesState() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(navidromeProfilesPath(), 'utf8')) || {};
+    const profiles = Array.isArray(parsed.profiles) ? parsed.profiles.filter(item => item && item.id && item.url) : [];
+    return { version: 1, activeId: String(parsed.activeId || (profiles[0] && profiles[0].id) || ''), profiles };
+  } catch (_) {
+    return { version: 1, activeId: '', profiles: [] };
+  }
+}
+
+function writeNavidromeProfilesState(state) {
+  const normalized = {
+    version: 1,
+    activeId: String(state && state.activeId || ''),
+    profiles: Array.isArray(state && state.profiles) ? state.profiles : [],
+  };
+  const file = navidromeProfilesPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = file + '.tmp-' + process.pid;
+  fs.writeFileSync(temp, JSON.stringify(normalized, null, 2), 'utf8');
+  fs.renameSync(temp, file);
+  return normalized;
+}
+
+function navidromeProfileWithSecret(record) {
+  if (!record) return null;
+  const secret = decryptNavidromeSecret(record.secret);
+  return Object.assign({}, record, secret, { id: String(record.id || '') });
+}
+
+function activeNavidromeProfile() {
+  const state = readNavidromeProfilesState();
+  const record = state.profiles.find(item => item.id === state.activeId) || state.profiles[0];
+  return record ? navidromeProfileWithSecret(record) : {};
+}
+
+function publicNavidromeProfiles() {
+  const state = readNavidromeProfilesState();
+  return {
+    version: 1,
+    activeId: state.activeId,
+    profiles: state.profiles.map(record => Object.assign({}, publicNavidromeConfig(navidromeProfileWithSecret(record)), {
+      id: record.id,
+      active: record.id === state.activeId,
+      hasSecret: !!record.secret,
+    })),
+  };
+}
+
+function configureRuntimeNavidromeProfile(profile) {
+  const normalized = normalizeNavidromeConfig(profile || {});
+  process.env.MINERADIO_NAVIDROME_PROFILE_JSON = JSON.stringify(normalized);
+  if (localServer && typeof localServer.configureNavidrome === 'function') {
+    localServer.configureNavidrome(normalized);
+  }
+  return publicNavidromeConfig(normalized);
+}
+
+function applyActiveNavidromeProfile() {
+  return configureRuntimeNavidromeProfile(activeNavidromeProfile());
+}
+
+function saveNavidromeProfile(payload) {
+  payload = payload && typeof payload === 'object' ? payload : {};
+  const state = readNavidromeProfilesState();
+  const requestedId = String(payload.id || payload.profileId || '').trim();
+  const existing = state.profiles.find(item => item.id === requestedId) || null;
+  const old = existing ? navidromeProfileWithSecret(existing) : {};
+  const normalized = normalizeNavidromeConfig(Object.assign({}, old, payload, {
+    id: requestedId || crypto.randomUUID(),
+    name: payload.name || payload.label || old.name || payload.username || 'Navidrome',
+    createdAt: old.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  }));
+  if (!normalized.url || !normalized.username) {
+    const error = new Error('请填写 Navidrome 地址和用户名');
+    error.code = 'NAVIDROME_PROFILE_INCOMPLETE';
+    throw error;
+  }
+  const secretInput = {
+    password: payload.password !== undefined && String(payload.password).trim() !== '' ? payload.password : old.password,
+    token: payload.token !== undefined && String(payload.token).trim() !== '' ? payload.token : old.token,
+    salt: payload.salt !== undefined && String(payload.salt).trim() !== '' ? payload.salt : old.salt,
+    apiKey: payload.apiKey !== undefined && String(payload.apiKey).trim() !== '' ? payload.apiKey : old.apiKey,
+  };
+  if (!secretInput.password && !secretInput.token && !secretInput.apiKey) {
+    const error = new Error('请填写 Navidrome 密码、Token 或 API Key');
+    error.code = 'NAVIDROME_SECRET_REQUIRED';
+    throw error;
+  }
+  const record = Object.assign({}, normalized, { secret: encryptNavidromeSecret(secretInput) });
+  delete record.password;
+  delete record.token;
+  delete record.salt;
+  delete record.apiKey;
+  const index = state.profiles.findIndex(item => item.id === record.id);
+  if (index >= 0) state.profiles[index] = record;
+  else state.profiles.push(record);
+  if (!state.activeId || payload.activate !== false) state.activeId = record.id;
+  writeNavidromeProfilesState(state);
+  const active = state.profiles.find(item => item.id === state.activeId);
+  if (active) configureRuntimeNavidromeProfile(navidromeProfileWithSecret(active));
+  return publicNavidromeProfiles();
+}
+
+function activateNavidromeProfile(profileId) {
+  const state = readNavidromeProfilesState();
+  const id = String(profileId || '').trim();
+  if (!state.profiles.some(item => item.id === id)) {
+    const error = new Error('Navidrome 账号不存在');
+    error.code = 'NAVIDROME_PROFILE_NOT_FOUND';
+    throw error;
+  }
+  state.activeId = id;
+  writeNavidromeProfilesState(state);
+  configureRuntimeNavidromeProfile(navidromeProfileWithSecret(state.profiles.find(item => item.id === id)));
+  return publicNavidromeProfiles();
+}
+
+function deleteNavidromeProfile(profileId) {
+  const state = readNavidromeProfilesState();
+  const id = String(profileId || '').trim();
+  const before = state.profiles.length;
+  state.profiles = state.profiles.filter(item => item.id !== id);
+  if (state.profiles.length === before) return publicNavidromeProfiles();
+  if (state.activeId === id) state.activeId = state.profiles[0] && state.profiles[0].id || '';
+  writeNavidromeProfilesState(state);
+  applyActiveNavidromeProfile();
+  return publicNavidromeProfiles();
 }
 
 function ensureCacheDirectories(settings) {
@@ -5224,6 +5390,79 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
   }
 });
 
+ipcMain.handle('mineradio-navidrome-profiles', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  return { ok: true, ...publicNavidromeProfiles() };
+});
+
+ipcMain.handle('mineradio-navidrome-save-profile', async (event, payload) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try { return { ok: true, ...saveNavidromeProfile(payload || {}) }; }
+  catch (error) { return { ok: false, error: error.code || error.message || 'NAVIDROME_PROFILE_SAVE_FAILED', message: error.message }; }
+});
+
+ipcMain.handle('mineradio-navidrome-activate-profile', async (event, profileId) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try { return { ok: true, ...activateNavidromeProfile(profileId) }; }
+  catch (error) { return { ok: false, error: error.code || error.message || 'NAVIDROME_PROFILE_ACTIVATE_FAILED', message: error.message }; }
+});
+
+ipcMain.handle('mineradio-navidrome-delete-profile', async (event, profileId) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try { return { ok: true, ...deleteNavidromeProfile(profileId) }; }
+  catch (error) { return { ok: false, error: error.code || error.message || 'NAVIDROME_PROFILE_DELETE_FAILED', message: error.message }; }
+});
+
+ipcMain.handle('mineradio-navidrome-test-profile', async (event, payload) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    // Editing a saved profile intentionally leaves the password blank in the
+    // renderer.  Resolve that profile here so “测试连接” tests the existing
+    // encrypted credential instead of reporting a false not-configured error.
+    const input = payload && typeof payload === 'object' ? payload : {};
+    const state = readNavidromeProfilesState();
+    const existing = state.profiles.find(item => item.id === String(input.id || input.profileId || '').trim());
+    const saved = existing ? navidromeProfileWithSecret(existing) : {};
+    const profile = normalizeNavidromeConfig(Object.assign({}, saved, input, {
+      password: input.password !== undefined && String(input.password).trim() !== '' ? input.password : saved.password,
+      token: input.token !== undefined && String(input.token).trim() !== '' ? input.token : saved.token,
+      salt: input.salt !== undefined && String(input.salt).trim() !== '' ? input.salt : saved.salt,
+      apiKey: input.apiKey !== undefined && String(input.apiKey).trim() !== '' ? input.apiKey : saved.apiKey,
+    }));
+    const client = new NavidromeClient(profile, { timeoutMs: 9000 });
+    const ping = await client.ping();
+    return { ok: true, ping };
+  } catch (error) {
+    return { ok: false, error: error.code || error.message || 'NAVIDROME_TEST_FAILED', message: error.message };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-choose-roots', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const owner = getSenderWindow(event);
+    const result = await dialog.showOpenDialog(owner, {
+      title: '选择本地音乐文件夹',
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return { ok: false, canceled: true };
+    if (!localServer || typeof localServer.setLocalLibraryRoots !== 'function') return { ok: false, error: 'LOCAL_SERVER_NOT_READY' };
+    const status = await localServer.setLocalLibraryRoots(result.filePaths, { force: false });
+    return { ok: true, paths: result.filePaths, status };
+  } catch (error) {
+    return { ok: false, error: error.code || error.message || 'LOCAL_LIBRARY_CHOOSE_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-library-rescan', async (event, force) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const library = localServer && typeof localServer.getLocalLibrary === 'function' ? localServer.getLocalLibrary() : null;
+    if (!library) return { ok: false, error: 'LOCAL_SERVER_NOT_READY' };
+    return { ok: true, status: await library.scan({ force: !!force }) };
+  } catch (error) { return { ok: false, error: error.code || error.message || 'LOCAL_LIBRARY_RESCAN_FAILED' }; }
+});
+
 ipcMain.on('mineradio-current-fx-autosave-read-sync', (event) => {
   event.returnValue = { ok: true, payload: readCurrentFxAutosaveFile() };
 });
@@ -5443,6 +5682,7 @@ ipcMain.handle('mineradio-wallpaper-get-status', async (event) => {
 function configureLocalServerEnvironment(port) {
   process.env.HOST = '127.0.0.1';
   process.env.PORT = String(port);
+  process.env.MINERADIO_LIBRARY_ONLY = '1';
   process.env.MINERADIO_BEAT_CACHE_DIR = cacheSettings.beatmapsPath;
   process.env.CUEFIELD_FEEDBACK_FILE = path.join(STABLE_USER_DATA_PATH, 'cuefield-feedback.jsonl');
   process.env.COOKIE_FILE = path.join(STABLE_USER_DATA_PATH, '.cookie');
@@ -5453,6 +5693,9 @@ function configureLocalServerEnvironment(port) {
   process.env.MINERADIO_LISTEN_SYNC_FILE = path.join(STABLE_USER_DATA_PATH, 'listen-sync-journal.json');
   process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_FILE = path.join(STABLE_USER_DATA_PATH, LOGIN_EASTER_EGG_STATE_FILE);
   process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_VERSION = LOGIN_EASTER_EGG_GATE_VERSION;
+  process.env.MINERADIO_LOCAL_LIBRARY_FILE = path.join(STABLE_USER_DATA_PATH, LOCAL_LIBRARY_INDEX_FILE);
+  process.env.MINERADIO_LOCAL_LIBRARY_CACHE = path.join(STABLE_USER_DATA_PATH, LOCAL_LIBRARY_CACHE_DIR);
+  try { applyActiveNavidromeProfile(); } catch (error) { console.warn('[Navidrome] profile load skipped:', error.message); }
   if (!process.env.QISHUI_OAUTH_CONFIG_FILE) {
     process.env.QISHUI_OAUTH_CONFIG_FILE = path.join(STABLE_USER_DATA_PATH, '.qishui-oauth.json');
   }

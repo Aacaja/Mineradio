@@ -130,9 +130,26 @@ const {
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
 const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge');
+const {
+  NavidromeClient,
+  NavidromeError,
+  normalizeConfig: normalizeNavidromeConfig,
+  publicConfig: publicNavidromeConfig,
+} = require('./navidrome-api');
+const {
+  LocalLibrary,
+  publicTrack: publicLocalTrack,
+  publicPlaylist: publicLocalPlaylist,
+} = require('./local-library');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+const LIBRARY_MODE = process.env.MINERADIO_LIBRARY_ONLY !== '0';
+const LIBRARY_DISABLED_LEGACY_PREFIXES = [
+  '/api/qq/', '/api/kugou/', '/api/qishui/', '/api/spotify/',
+  '/api/podcast/', '/api/login/', '/api/logout',
+  '/api/album/subscribe', '/api/song/comments', '/api/cover', '/api/audio',
+];
 const LOGIN_EASTER_EGG_GATE_FILE = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_FILE || '');
 const LOGIN_EASTER_EGG_GATE_VERSION = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_VERSION || 'world-peace-v1');
 const LOGIN_EASTER_EGG_PROTECTED_ROUTES = new Set([
@@ -176,6 +193,32 @@ const WEATHER_DEFAULT_LOCATION = {
   longitude: 121.4737,
   timezone: 'Asia/Shanghai',
 };
+
+function readRuntimeNavidromeProfile() {
+  const raw = String(process.env.MINERADIO_NAVIDROME_PROFILE_JSON || '').trim();
+  if (raw) {
+    try { return normalizeNavidromeConfig(JSON.parse(raw)); } catch (_) { }
+  }
+  return normalizeNavidromeConfig({
+    url: process.env.NAVIDROME_URL,
+    username: process.env.NAVIDROME_USERNAME,
+    password: process.env.NAVIDROME_PASSWORD,
+    token: process.env.NAVIDROME_TOKEN,
+    salt: process.env.NAVIDROME_SALT,
+    apiKey: process.env.NAVIDROME_API_KEY,
+    name: process.env.NAVIDROME_NAME || 'Navidrome',
+  });
+}
+
+let navidromeClient = new NavidromeClient(readRuntimeNavidromeProfile());
+const localLibrary = new LocalLibrary({
+  indexFile: process.env.MINERADIO_LOCAL_LIBRARY_FILE || path.join(__dirname, 'data', 'local-library.json'),
+  cacheDir: process.env.MINERADIO_LOCAL_LIBRARY_CACHE || path.join(__dirname, 'data', 'local-library-cache'),
+});
+const localLibraryReady = localLibrary.init().catch(error => {
+  console.warn('[LocalLibrary] initialization failed:', error.message);
+  return localLibrary;
+});
 
 function loadListenSyncJournal() {
   try {
@@ -226,6 +269,12 @@ function rememberListenSyncSubmission(key, result) {
 
 function applySystemCertificateAuthorities() {
   try {
+    // On some Node/macOS combinations getCACertificates('system') calls the
+    // Security framework with an invalid keychain query and can terminate the
+    // process before the HTTP server starts.  Node's bundled trust store is
+    // sufficient for the HTTPS Navidrome tunnel, and Windows uses the normal
+    // system path below.
+    if (process.platform === 'darwin') return;
     if (typeof tls.getCACertificates !== 'function' || typeof tls.setDefaultCACertificates !== 'function') return;
     const bundled = tls.getCACertificates('default') || [];
     const system = tls.getCACertificates('system') || [];
@@ -2905,12 +2954,20 @@ function sendAudioBuffer(res, buffer, contentType, range) {
 
 function audioContentTypeForUrl(audioUrl, upstreamType) {
   let pathname = '';
-  try { pathname = new URL(audioUrl).pathname.toLowerCase(); } catch (e) {}
+  try { pathname = new URL(audioUrl).pathname.toLowerCase(); } catch (e) {
+    // Local-library streams use absolute filesystem paths rather than URLs.
+    // Keep their extension so FLAC/WAV/Opus files are decoded with the right
+    // content type by Chromium instead of inheriting the MP3 fallback.
+    pathname = String(audioUrl || '').split(/[?#]/, 1)[0].toLowerCase();
+  }
   if (/\.flac$/.test(pathname)) return 'audio/flac';
   if (/\.mp3$/.test(pathname)) return 'audio/mpeg';
   if (/\.(m4a|mp4)$/.test(pathname)) return 'audio/mp4';
-  if (/\.ogg$/.test(pathname)) return 'audio/ogg';
+  if (/\.(ogg|oga)$/.test(pathname)) return 'audio/ogg';
+  if (/\.opus$/.test(pathname)) return 'audio/ogg; codecs=opus';
   if (/\.wav$/.test(pathname)) return 'audio/wav';
+  if (/\.aac$/.test(pathname)) return 'audio/aac';
+  if (/\.webm$/.test(pathname)) return 'audio/webm';
   return upstreamType || 'audio/mpeg';
 }
 
@@ -4619,10 +4676,506 @@ function loginEasterEggGateUnlocked() {
   }
 }
 
+function librarySongId(song) {
+  song = song || {};
+  return String(song.id || song.providerSongId || song.localId || '').trim();
+}
+
+function libraryPublicProfile() {
+  return navidromeClient.publicConfig;
+}
+
+async function handleLibraryStatus() {
+  await localLibraryReady;
+  const profile = libraryPublicProfile();
+  let remote = { configured: profile.configured, connected: false, error: '' };
+  if (profile.configured) {
+    try {
+      remote = Object.assign(remote, await navidromeClient.ping(), { configured: true, connected: true });
+    } catch (error) {
+      remote.error = error.code || error.message || 'NAVIDROME_UNAVAILABLE';
+      remote.message = error.message || 'Navidrome 暂时不可用';
+    }
+  }
+  return {
+    provider: 'library',
+    source: 'library',
+    loggedIn: !!remote.connected,
+    configured: !!profile.configured,
+    connected: !!remote.connected,
+    profile,
+    navidrome: remote,
+    local: localLibrary.status(),
+    capabilities: {
+      search: true,
+      playback: true,
+      playlists: true,
+      likeRead: true,
+      likeWrite: true,
+      albumRead: true,
+      artistRead: true,
+      lyrics: true,
+      localFolders: true,
+    },
+  };
+}
+
+async function handleLibrarySearch(query, limit, offset, source) {
+  await localLibraryReady;
+  const kw = String(query || '').trim();
+  const size = Math.max(1, Math.min(200, Number(limit) || 40));
+  const start = Math.max(0, Number(offset) || 0);
+  const requestedSource = String(source || 'all').toLowerCase();
+  const includeRemote = requestedSource === 'all' || requestedSource === 'navidrome' || requestedSource === 'netease';
+  const includeLocal = requestedSource === 'all' || requestedSource === 'local';
+  const remoteResult = includeRemote && navidromeClient.configured
+    ? await navidromeClient.search(kw, start, size).catch(error => ({ error: error.code || error.message, songs: [], tracks: [], albums: [], artists: [], total: 0 }))
+    : { songs: [], tracks: [], albums: [], artists: [], total: 0 };
+  const localResult = includeLocal
+    ? localLibrary.search(kw, size, start)
+    : { songs: [], tracks: [], albums: [], artists: [], total: 0 };
+  const songs = (remoteResult.songs || []).concat(localResult.songs || []).slice(0, size);
+  const tracks = songs;
+  const albums = (remoteResult.albums || []).concat(localResult.albums || []);
+  const artists = (remoteResult.artists || []).concat(localResult.artists || []);
+  const total = Math.max(songs.length, Number(remoteResult.total) || 0, Number(localResult.total) || 0);
+  return {
+    provider: 'library',
+    source: 'library',
+    query: kw,
+    songs,
+    tracks,
+    albums,
+    artists,
+    total,
+    offset: start,
+    limit: size,
+    nextOffset: start + songs.length,
+    hasMore: start + songs.length < total,
+    remoteError: remoteResult.error || '',
+  };
+}
+
+async function handleLibraryHome() {
+  await localLibraryReady;
+  const localSongs = localLibrary.tracks.slice().sort((a, b) => Number(b.addedAt || 0) - Number(a.addedAt || 0)).map(publicLocalTrack);
+  const remote = { recentSongs: [], randomSongs: [], starredSongs: [], playlists: [], albums: [], error: '' };
+  if (navidromeClient.configured) {
+    const tasks = await Promise.allSettled([
+      navidromeClient.recentlyPlayed(24),
+      navidromeClient.randomSongs(24),
+      navidromeClient.starred(24),
+      navidromeClient.playlists(),
+      navidromeClient.albumList('newest', 12, 0),
+    ]);
+    const values = tasks.map(item => item.status === 'fulfilled' ? item.value : []);
+    remote.recentSongs = values[0] || [];
+    remote.randomSongs = values[1] || [];
+    remote.starredSongs = values[2] || [];
+    remote.playlists = values[3] || [];
+    remote.albums = values[4] || [];
+    remote.error = tasks.filter(item => item.status === 'rejected').map(item => item.reason && (item.reason.code || item.reason.message)).filter(Boolean).join(',');
+  }
+  const localPlaylists = localLibrary.playlists || [];
+  const dailySongs = remote.recentSongs.concat(remote.randomSongs, localSongs).slice(0, 36);
+  const localAvailable = !!(localLibrary.roots.length || localSongs.length);
+  return {
+    provider: 'library',
+    source: 'library',
+    loggedIn: !!navidromeClient.configured || localAvailable,
+    connected: (!!navidromeClient.configured && !remote.error) || localAvailable,
+    configured: !!navidromeClient.configured,
+    mode: 'library',
+    dailySongs,
+    songs: dailySongs,
+    recentSongs: remote.recentSongs.concat(localSongs.slice(0, 12)).slice(0, 24),
+    starredSongs: remote.starredSongs.concat(localSongs.filter(item => item.starred)).slice(0, 24),
+    randomSongs: remote.randomSongs.concat(localSongs).slice(0, 24),
+    playlists: remote.playlists.concat(localPlaylists).slice(0, 60),
+    albums: remote.albums.concat(localLibrary.albums(24)),
+    podcasts: [],
+    local: localLibrary.status(),
+    error: remote.error,
+    updatedAt: Date.now(),
+  };
+}
+
+async function handleLibraryPlaylists() {
+  await localLibraryReady;
+  let remote = [];
+  let error = '';
+  if (navidromeClient.configured) {
+    try { remote = await navidromeClient.playlists(); } catch (err) { error = err.code || err.message || 'NAVIDROME_PLAYLISTS_FAILED'; }
+  }
+  return { provider: 'library', source: 'library', playlists: remote.concat(localLibrary.playlists || []), total: remote.length + (localLibrary.playlists || []).length, error };
+}
+
+async function handleLibraryPlaylistTracks(id, limit, offset) {
+  await localLibraryReady;
+  const playlistId = String(id || '').trim();
+  if (playlistId.startsWith('local:')) {
+    const local = localLibrary.getPlaylist(playlistId);
+    if (!local) return { provider: 'local', source: 'local', playlist: null, tracks: [], total: 0, error: 'LOCAL_PLAYLIST_NOT_FOUND' };
+    const start = Math.max(0, Number(offset) || 0);
+    const size = Math.max(1, Math.min(500, Number(limit) || 100));
+    return Object.assign({}, local, { provider: 'local', source: 'local', tracks: local.tracks.slice(start, start + size), nextOffset: start + Math.min(size, local.tracks.length - start), hasMore: start + size < local.tracks.length });
+  }
+  if (!navidromeClient.configured) return { provider: 'navidrome', source: 'navidrome', playlist: null, tracks: [], total: 0, error: 'NAVIDROME_NOT_CONFIGURED' };
+  const result = await navidromeClient.playlist(playlistId);
+  const start = Math.max(0, Number(offset) || 0);
+  const size = Math.max(1, Math.min(500, Number(limit) || 100));
+  return Object.assign({}, result, { provider: 'navidrome', source: 'navidrome', tracks: result.tracks.slice(start, start + size), nextOffset: start + Math.min(size, result.tracks.length - start), hasMore: start + size < result.tracks.length });
+}
+
+async function handleLibraryAlbum(id) {
+  await localLibraryReady;
+  const key = String(id || '').trim();
+  if (key.startsWith('local:')) return localLibrary.album(key) || { provider: 'local', album: null, songs: [], tracks: [], total: 0, error: 'LOCAL_ALBUM_NOT_FOUND' };
+  if (!navidromeClient.configured) return { provider: 'navidrome', album: null, songs: [], tracks: [], total: 0, error: 'NAVIDROME_NOT_CONFIGURED' };
+  return navidromeClient.album(key);
+}
+
+async function handleLibraryArtist(id) {
+  await localLibraryReady;
+  const key = String(id || '').trim();
+  if (key.startsWith('local:')) return localLibrary.artist(key) || { provider: 'local', artist: null, albums: [], songs: [], tracks: [], total: 0, error: 'LOCAL_ARTIST_NOT_FOUND' };
+  if (!navidromeClient.configured) return { provider: 'navidrome', artist: null, albums: [], songs: [], tracks: [], total: 0, error: 'NAVIDROME_NOT_CONFIGURED' };
+  return navidromeClient.artist(key);
+}
+
+async function handleLibrarySongUrl(song, quality) {
+  await localLibraryReady;
+  const id = librarySongId(song);
+  if (id.startsWith('local:')) {
+    const local = localLibrary.fileForStream(id);
+    if (!local) return { provider: 'local', source: 'local', playable: false, url: '', error: 'LOCAL_FILE_UNAVAILABLE', message: '本地文件不可用' };
+    return { provider: 'local', source: 'local', playable: true, url: '/api/library/stream?id=' + encodeURIComponent(id), id, level: 'original', quality: '原始文件', contentType: local.contentType || '' };
+  }
+  if (!navidromeClient.configured) return { provider: 'navidrome', source: 'navidrome', playable: false, url: '', error: 'NAVIDROME_NOT_CONFIGURED', message: '请先配置 Navidrome 音乐库' };
+  const qualityMap = { standard: 128, exhigh: 320, lossless: 0, hires: 0, jymaster: 0 };
+  const maxBitRate = qualityMap[String(quality || '').toLowerCase()] || 0;
+  return { provider: 'navidrome', source: 'navidrome', playable: true, url: '/api/library/stream?id=' + encodeURIComponent(id) + (maxBitRate ? '&maxBitRate=' + maxBitRate : ''), id, level: maxBitRate ? 'transcoded' : 'original', quality: maxBitRate ? maxBitRate + 'kbps' : '原始文件' };
+}
+
+async function handleLibraryLyrics(id, song) {
+  await localLibraryReady;
+  const key = String(id || librarySongId(song)).trim();
+  if (key.startsWith('local:')) return localLibrary.readLyrics(key) || { provider: 'local', lyric: '', lrc: '', trans: '' };
+  if (!navidromeClient.configured) return { provider: 'navidrome', lyric: '', lrc: '', trans: '', error: 'NAVIDROME_NOT_CONFIGURED' };
+  const result = await navidromeClient.lyrics(key, song && song.artist, song && (song.name || song.title));
+  const payload = result && result.raw || {};
+  const lines = Array.isArray(result && result.synced) ? result.synced : [];
+  const lrc = result && result.lyrics || payload.value || payload.lyrics || '';
+  const synced = lines.map(line => {
+    const start = Number(line.start || line.startTime || line.time || 0);
+    return '[' + new Date(Math.max(0, start)).toISOString().slice(14, 19) + '.' + String(Math.max(0, start) % 1000).padStart(3, '0') + ']' + String(line.value || line.text || '');
+  }).join('\n');
+  return { provider: 'navidrome', lyric: synced || lrc, lrc: synced || lrc, trans: '', raw: result };
+}
+
+async function handleLibraryLikeCheck(ids) {
+  await localLibraryReady;
+  const list = (Array.isArray(ids) ? ids : [ids]).map(item => String(item || '').trim()).filter(Boolean);
+  const liked = {};
+  list.filter(id => id.startsWith('local:')).forEach(id => { liked[id] = localLibrary.isFavorite(id); });
+  const remoteIds = list.filter(id => !id.startsWith('local:'));
+  if (remoteIds.length && navidromeClient.configured) {
+    try {
+      const starred = await navidromeClient.starred(Math.min(500, Math.max(100, remoteIds.length * 2)));
+      const set = new Set(starred.map(item => item.id));
+      remoteIds.forEach(id => { liked[id] = set.has(id); });
+    } catch (_) { remoteIds.forEach(id => { liked[id] = false; }); }
+  } else remoteIds.forEach(id => { liked[id] = false; });
+  return { provider: 'library', source: 'library', liked };
+}
+
+async function handleLibraryLike(song, liked) {
+  await localLibraryReady;
+  const id = librarySongId(song);
+  if (!id) return { provider: 'library', success: false, error: 'MISSING_SONG_ID' };
+  if (id.startsWith('local:')) {
+    await localLibrary.setFavorite(id, !!liked);
+    return { provider: 'local', source: 'local', success: true, liked: !!liked, id };
+  }
+  if (!navidromeClient.configured) return { provider: 'navidrome', success: false, error: 'NAVIDROME_NOT_CONFIGURED' };
+  return Object.assign({ provider: 'navidrome', source: 'navidrome', id }, await navidromeClient.setStar(id, !!liked), { success: true });
+}
+
+async function handleLibraryListenReport(body) {
+  body = body || {};
+  const song = body.song || body.track || body;
+  const id = librarySongId(song) || String(body.songId || '').trim();
+  if (!id) return { accepted: false, localRecorded: true, error: 'MISSING_SONG_ID' };
+  if (id.startsWith('local:')) return { accepted: true, localRecorded: true, platformSubmitted: false, provider: 'local', songId: id };
+  if (!navidromeClient.configured) return { accepted: true, localRecorded: true, platformSubmitted: false, provider: 'navidrome', songId: id, reason: 'NAVIDROME_NOT_CONFIGURED' };
+  try {
+    await navidromeClient.scrobble(id, body.submission !== false);
+    return { accepted: true, localRecorded: true, platformSubmitted: true, provider: 'navidrome', songId: id };
+  } catch (error) {
+    return { accepted: true, localRecorded: true, platformSubmitted: false, provider: 'navidrome', songId: id, error: error.code || error.message };
+  }
+}
+
+async function handleLibraryCapabilities() {
+  const status = await handleLibraryStatus();
+  return { library: status.capabilities, navidrome: status.navidrome, local: status.local };
+}
+
+async function proxyLibraryStream(req, res, url) {
+  await localLibraryReady;
+  const id = String(url.searchParams.get('id') || '').trim();
+  const range = req.headers.range || '';
+  if (id.startsWith('local:')) {
+    const track = localLibrary.fileForStream(id);
+    if (!track) { sendJSON(res, { error: 'LOCAL_FILE_UNAVAILABLE' }, 404); return; }
+    const stat = await fs.promises.stat(track.filePath);
+    const total = Number(stat.size) || 0;
+    const match = /^bytes=(\d*)-(\d*)$/i.exec(range);
+    let start = 0;
+    let end = Math.max(0, total - 1);
+    if (match) {
+      if (match[1]) start = Number(match[1]);
+      if (match[2]) end = Number(match[2]);
+      if (!match[1] && match[2]) start = Math.max(0, total - Number(match[2]));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > end || start >= total) {
+        res.writeHead(416, { 'Content-Range': 'bytes */' + total });
+        res.end();
+        return;
+      }
+      end = Math.min(end, total - 1);
+    }
+    const contentType = audioContentTypeForUrl(track.filePath, 'audio/mpeg');
+    const headers = { 'Content-Type': contentType, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store', 'Content-Length': String(end - start + 1) };
+    if (match) { headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + total; res.writeHead(206, headers); }
+    else res.writeHead(200, headers);
+    const stream = fs.createReadStream(track.filePath, { start, end });
+    req.once('close', () => { try { stream.destroy(); } catch (_) { } });
+    stream.on('error', () => { if (!res.headersSent) res.writeHead(500); res.end(); });
+    stream.pipe(res);
+    return;
+  }
+  if (!navidromeClient.configured) { sendJSON(res, { error: 'NAVIDROME_NOT_CONFIGURED' }, 401); return; }
+  const params = {};
+  const maxBitRate = Number(url.searchParams.get('maxBitRate') || 0);
+  if (Number.isFinite(maxBitRate) && maxBitRate > 0) params.maxBitRate = Math.min(320, Math.max(32, maxBitRate));
+  if (url.searchParams.get('format')) params.format = String(url.searchParams.get('format'));
+  let upstream;
+  try {
+    upstream = await navidromeClient.requestBinary('stream', Object.assign({ id }, params), { headers: range ? { Range: range } : {} });
+  } catch (error) {
+    sendJSON(res, { error: error.code || error.message || 'NAVIDROME_STREAM_FAILED', message: error.message }, Number(error.statusCode) || 502);
+    return;
+  }
+  const headers = {
+    'Content-Type': audioContentTypeForUrl(navidromeClient.config.url, upstream.headers.get('content-type') || 'audio/mpeg'),
+    'Accept-Ranges': upstream.headers.get('accept-ranges') || 'bytes',
+    'Cache-Control': 'no-store',
+  };
+  ['content-length', 'content-range', 'last-modified', 'etag'].forEach(key => {
+    const value = upstream.headers.get(key);
+    if (!value) return;
+    const headerName = key === 'content-length' ? 'Content-Length'
+      : key === 'content-range' ? 'Content-Range'
+        : key === 'last-modified' ? 'Last-Modified' : 'ETag';
+    headers[headerName] = value;
+  });
+  res.writeHead(upstream.status || (range ? 206 : 200), headers);
+  if (!upstream.body) { res.end(); return; }
+  const reader = upstream.body.getReader();
+  let closed = false;
+  const close = () => { closed = true; try { reader.cancel(); } catch (_) { } };
+  req.once('close', close);
+  try {
+    while (!closed) {
+      const chunk = await readStreamChunkWithTimeout(reader, 15000);
+      if (chunk.done) break;
+      res.write(chunk.value);
+    }
+  } catch (_) {
+    if (!res.headersSent) res.writeHead(502);
+  } finally {
+    req.removeListener('close', close);
+    if (!closed) res.end();
+  }
+}
+
+async function proxyLibraryCover(res, url) {
+  await localLibraryReady;
+  const id = String(url.searchParams.get('id') || '').trim();
+  if (id.startsWith('local:')) {
+    const cover = await localLibrary.readCover(id);
+    if (!cover) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': cover.contentType, 'Cache-Control': 'private, max-age=3600' });
+    fs.createReadStream(cover.file).pipe(res);
+    return;
+  }
+  if (!navidromeClient.configured) { res.writeHead(404); res.end(); return; }
+  try {
+    const upstream = await navidromeClient.requestBinary('getCoverArt', { id, size: url.searchParams.get('size') || 600 });
+    res.writeHead(upstream.status || 200, { 'Content-Type': upstream.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'private, max-age=3600' });
+    if (upstream.body) {
+      const reader = upstream.body.getReader();
+      while (true) { const chunk = await reader.read(); if (chunk.done) break; res.write(chunk.value); }
+    }
+    res.end();
+  } catch (_) { res.writeHead(404); res.end(); }
+}
+
 const server = http.createServer(async (req, res) => {
   refreshConfiguredCookieStores(false);
   const url = new URL(req.url, 'http://localhost:' + PORT);
   const pn = url.pathname;
+
+  // Navidrome/local-library routes are kept at the front of the router so the
+  // old provider implementation can remain available during the migration,
+  // while the shipped app defaults to the library-only contract.
+  if (LIBRARY_MODE) {
+    try {
+      if (pn === '/api/library/status' || pn === '/api/login/status') {
+        sendJSON(res, await handleLibraryStatus());
+        return;
+      }
+      if (pn === '/api/library/capabilities' || pn === '/api/platform/capabilities') {
+        sendJSON(res, await handleLibraryCapabilities());
+        return;
+      }
+      if (pn === '/api/library/home' || pn === '/api/discover/home') {
+        sendJSON(res, await handleLibraryHome());
+        return;
+      }
+      if (pn === '/api/library/search' || pn === '/api/search') {
+        const source = url.searchParams.get('source') || url.searchParams.get('provider') || 'all';
+        sendJSON(res, await handleLibrarySearch(
+          url.searchParams.get('keywords') || url.searchParams.get('q') || '',
+          url.searchParams.get('limit') || 40,
+          url.searchParams.get('offset') || 0,
+          source
+        ));
+        return;
+      }
+      if (pn === '/api/library/playlists' || pn === '/api/user/playlists') {
+        sendJSON(res, await handleLibraryPlaylists());
+        return;
+      }
+      if (pn === '/api/library/playlist/tracks' || pn === '/api/playlist/tracks') {
+        sendJSON(res, await handleLibraryPlaylistTracks(
+          url.searchParams.get('id') || url.searchParams.get('playlistId') || '',
+          url.searchParams.get('limit') || 100,
+          url.searchParams.get('offset') || 0
+        ));
+        return;
+      }
+      if (pn === '/api/library/album' || pn === '/api/album/detail') {
+        sendJSON(res, await handleLibraryAlbum(url.searchParams.get('id') || url.searchParams.get('albumId') || url.searchParams.get('albumMid') || ''));
+        return;
+      }
+      if (pn === '/api/library/artist' || pn === '/api/artist/detail') {
+        sendJSON(res, await handleLibraryArtist(url.searchParams.get('id') || url.searchParams.get('artistId') || url.searchParams.get('mid') || ''));
+        return;
+      }
+      if (pn === '/api/library/song/url' || pn === '/api/song/url') {
+        sendJSON(res, await handleLibrarySongUrl({
+          id: url.searchParams.get('id') || url.searchParams.get('songId') || url.searchParams.get('providerSongId') || '',
+          provider: url.searchParams.get('provider') || '',
+        }, url.searchParams.get('quality') || url.searchParams.get('level') || ''));
+        return;
+      }
+      if (pn === '/api/library/stream') {
+        await proxyLibraryStream(req, res, url);
+        return;
+      }
+      if (pn === '/api/library/cover' || pn === '/api/local/cover') {
+        await proxyLibraryCover(res, url);
+        return;
+      }
+      if (pn === '/api/library/lyric' || pn === '/api/lyric') {
+        sendJSON(res, await handleLibraryLyrics(
+          url.searchParams.get('id') || url.searchParams.get('songId') || '',
+          { artist: url.searchParams.get('artist') || '', name: url.searchParams.get('title') || '' }
+        ));
+        return;
+      }
+      if (pn === '/api/library/song/like/check' || pn === '/api/song/like/check') {
+        const raw = url.searchParams.get('ids') || url.searchParams.get('id') || '';
+        let ids = raw.split(',').map(item => item.trim()).filter(Boolean);
+        try { if (raw.trim().startsWith('[')) ids = JSON.parse(raw); } catch (_) { }
+        sendJSON(res, await handleLibraryLikeCheck(ids));
+        return;
+      }
+      if (pn === '/api/library/song/like' || pn === '/api/song/like') {
+        if (req.method !== 'POST') { sendJSON(res, { success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        const body = await readRequestBody(req);
+        const song = body.song || body.track || body;
+        const liked = body.liked != null ? !!body.liked : body.like !== false;
+        sendJSON(res, await handleLibraryLike(song, liked));
+        return;
+      }
+      if (pn === '/api/listen/report') {
+        if (req.method !== 'POST') { sendJSON(res, { accepted: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        sendJSON(res, await handleLibraryListenReport(await readRequestBody(req)));
+        return;
+      }
+      if (pn === '/api/library/roots' || pn === '/api/local/roots') {
+        await localLibraryReady;
+        if (req.method === 'GET') { sendJSON(res, localLibrary.status()); return; }
+        if (req.method !== 'POST') { sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        const body = await readRequestBody(req);
+        sendJSON(res, await localLibrary.setRoots(body.roots || body.paths || [], { force: !!body.force }));
+        return;
+      }
+      if (pn === '/api/library/scan' || pn === '/api/local/scan') {
+        if (req.method !== 'POST' && req.method !== 'GET') { sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        sendJSON(res, await localLibrary.scan({ force: url.searchParams.get('force') === '1' }));
+        return;
+      }
+      if (pn === '/api/library/local/status' || pn === '/api/local/status') {
+        await localLibraryReady;
+        sendJSON(res, localLibrary.status());
+        return;
+      }
+      if (pn === '/api/library/playlist/create' || pn === '/api/playlist/create') {
+        if (req.method !== 'POST') { sendJSON(res, { success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        const body = await readRequestBody(req);
+        if (!navidromeClient.configured) { sendJSON(res, { success: false, error: 'NAVIDROME_NOT_CONFIGURED' }, 401); return; }
+        const song = body.song || body.track || {};
+        const created = await navidromeClient.createPlaylist(body.name || body.title || 'Mineradio 歌单', librarySongId(song) && !librarySongId(song).startsWith('local:') ? [librarySongId(song)] : []);
+        sendJSON(res, { provider: 'navidrome', playlist: created, id: created.id, created: true, success: true });
+        return;
+      }
+      if (pn === '/api/library/playlist/add-song' || pn === '/api/playlist/add-song') {
+        if (req.method !== 'POST') { sendJSON(res, { success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+        const body = await readRequestBody(req);
+        const pid = String(body.pid || body.playlistId || body.id || '').trim();
+        const song = body.song || body.track || body;
+        const songId = librarySongId(song);
+        if (!pid || !songId || pid.startsWith('local:') || songId.startsWith('local:') || !navidromeClient.configured) {
+          sendJSON(res, { success: false, error: 'NAVIDROME_PLAYLIST_WRITE_UNAVAILABLE' }, 400);
+          return;
+        }
+        const current = await navidromeClient.playlist(pid);
+        const updated = await navidromeClient.updatePlaylist(pid, { songId: current.tracks.map(item => item.id).concat(songId) });
+        sendJSON(res, { provider: 'navidrome', playlist: updated, success: true });
+        return;
+      }
+      if (pn === '/api/library/playlist/subscribe' || pn === '/api/playlist/subscribe') {
+        sendJSON(res, { provider: 'navidrome', success: true, subscribed: !!(await readRequestBody(req)).subscribed });
+        return;
+      }
+    } catch (error) {
+      const status = Number(error && error.statusCode) || 500;
+      console.error('[LibraryAPI]', pn, error && (error.code || error.message));
+      sendJSON(res, { ok: false, success: false, provider: 'library', error: error.code || error.message || 'LIBRARY_REQUEST_FAILED', message: error.message || '媒体库请求失败' }, status);
+      return;
+    }
+  }
+
+  // Keep the old provider implementation available for explicit migrations,
+  // but make the default desktop/library mode a true no-login contract.  This
+  // also prevents hidden podcast routes from making external requests.
+  if (LIBRARY_MODE && LIBRARY_DISABLED_LEGACY_PREFIXES.some(prefix => pn === prefix || pn.startsWith(prefix))) {
+    sendJSON(res, { ok: false, error: 'LIBRARY_MODE_ONLY', message: '当前应用仅启用 Navidrome / 本地媒体库' }, 404);
+    return;
+  }
 
   if (LOGIN_EASTER_EGG_PROTECTED_ROUTES.has(pn) && !loginEasterEggGateUnlocked()) {
     sendJSON(res, {
@@ -6608,5 +7161,16 @@ server.listen(PORT, HOST, () => {
 });
 
 server.clearAllLoginCredentials = clearAllRuntimeLoginCredentials;
+server.configureNavidrome = (profile) => {
+  navidromeClient = new NavidromeClient(profile || {});
+  return navidromeClient.publicConfig;
+};
+server.getNavidromeConfig = () => navidromeClient.publicConfig;
+server.getLocalLibrary = () => localLibrary;
+server.setLocalLibraryRoots = async (roots, options) => {
+  await localLibraryReady;
+  return localLibrary.setRoots(roots, options || {});
+};
+server.on('close', () => localLibrary.close());
 
 module.exports = server;
