@@ -98,6 +98,7 @@
     'js/modules/08-account/04-user-modal-logout.js',
     'js/modules/08-account/05-startup-login-guide.js',
     'js/modules/08-library/00-library-runtime.js',
+    'js/modules/08-library/01-library-browser.js',
     'js/modules/09-idle-toast-libraries.js',
     'js/modules/10-shell/00-gesture-control.js',
     'js/modules/10-shell/01-viewport-resize-shortcuts.js',

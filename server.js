@@ -4810,6 +4810,70 @@ async function handleLibraryPlaylists() {
   return { provider: 'library', source: 'library', playlists: remote.concat(localLibrary.playlists || []), total: remote.length + (localLibrary.playlists || []).length, error };
 }
 
+async function handleLibraryAlbums(offset, limit, source, sort) {
+  await localLibraryReady;
+  const start = Math.max(0, Number(offset) || 0);
+  const size = Math.max(1, Math.min(120, Number(limit) || 48));
+  const requestedSource = String(source || '').toLowerCase();
+  const localAlbums = localLibrary.albums(5000);
+  const shouldUseLocal = requestedSource === 'local' || (!navidromeClient.configured && requestedSource !== 'navidrome');
+  const shouldUseRemote = requestedSource !== 'local' && navidromeClient.configured;
+  const sortMap = {
+    alphabeticalbyname: 'alphabeticalByName',
+    alphabeticalbyartist: 'alphabeticalByArtist',
+    newest: 'newest',
+    recent: 'recent',
+    random: 'random',
+  };
+  const order = sortMap[String(sort || '').toLowerCase()] || 'alphabeticalByName';
+
+  if (shouldUseLocal && !shouldUseRemote) {
+    const albums = localAlbums.slice(start, start + size);
+    return {
+      provider: 'local', source: 'local', albums, total: localAlbums.length,
+      offset: start, limit: size, nextOffset: start + albums.length,
+      hasMore: start + albums.length < localAlbums.length, error: '',
+    };
+  }
+
+  if (shouldUseRemote) {
+    try {
+      const page = await navidromeClient.albumListPage(order, size, start);
+      return Object.assign({ provider: 'navidrome', source: 'navidrome', error: '' }, page);
+    } catch (error) {
+      // A connected Navidrome account is the primary catalogue.  If the
+      // catalogue endpoint is unavailable, return local albums when present
+      // so the browser remains useful and exposes the actual remote error.
+      if (!localAlbums.length) {
+        return {
+          provider: 'navidrome', source: 'navidrome', albums: [], total: 0,
+          offset: start, limit: size, nextOffset: start, hasMore: false,
+          error: error.code || error.message || 'NAVIDROME_ALBUMS_FAILED',
+          message: error.message || 'Navidrome 专辑目录读取失败',
+        };
+      }
+      const albums = localAlbums.slice(start, start + size);
+      return {
+        provider: 'local', source: 'local', albums, total: localAlbums.length,
+        offset: start, limit: size, nextOffset: start + albums.length,
+        hasMore: start + albums.length < localAlbums.length,
+        error: error.code || error.message || 'NAVIDROME_ALBUMS_FAILED',
+        message: error.message || 'Navidrome 专辑目录读取失败，已显示本地音乐',
+      };
+    }
+  }
+
+  // A local-only installation (or an explicit `source=local` request) uses
+  // the same paginated response shape as Navidrome.  The client exposes
+  // separate source tabs so pagination never interleaves two catalogues.
+  const albums = localAlbums.slice(start, start + size);
+  return {
+    provider: 'local', source: 'local', albums, total: localAlbums.length,
+    offset: start, limit: size, nextOffset: start + albums.length,
+    hasMore: start + albums.length < localAlbums.length, error: '',
+  };
+}
+
 async function handleLibraryPlaylistTracks(id, limit, offset) {
   await localLibraryReady;
   const playlistId = String(id || '').trim();
@@ -4818,13 +4882,17 @@ async function handleLibraryPlaylistTracks(id, limit, offset) {
     if (!local) return { provider: 'local', source: 'local', playlist: null, tracks: [], total: 0, error: 'LOCAL_PLAYLIST_NOT_FOUND' };
     const start = Math.max(0, Number(offset) || 0);
     const size = Math.max(1, Math.min(500, Number(limit) || 100));
-    return Object.assign({}, local, { provider: 'local', source: 'local', tracks: local.tracks.slice(start, start + size), nextOffset: start + Math.min(size, local.tracks.length - start), hasMore: start + size < local.tracks.length });
+    const remaining = Math.max(0, local.tracks.length - start);
+    const pageTracks = local.tracks.slice(start, start + size);
+    return Object.assign({}, local, { provider: 'local', source: 'local', tracks: pageTracks, nextOffset: start + Math.min(size, remaining), hasMore: start + pageTracks.length < local.tracks.length });
   }
   if (!navidromeClient.configured) return { provider: 'navidrome', source: 'navidrome', playlist: null, tracks: [], total: 0, error: 'NAVIDROME_NOT_CONFIGURED' };
   const result = await navidromeClient.playlist(playlistId);
   const start = Math.max(0, Number(offset) || 0);
   const size = Math.max(1, Math.min(500, Number(limit) || 100));
-  return Object.assign({}, result, { provider: 'navidrome', source: 'navidrome', tracks: result.tracks.slice(start, start + size), nextOffset: start + Math.min(size, result.tracks.length - start), hasMore: start + size < result.tracks.length });
+  const remaining = Math.max(0, result.tracks.length - start);
+  const pageTracks = result.tracks.slice(start, start + size);
+  return Object.assign({}, result, { provider: 'navidrome', source: 'navidrome', tracks: pageTracks, nextOffset: start + Math.min(size, remaining), hasMore: start + pageTracks.length < result.tracks.length });
 }
 
 async function handleLibraryAlbum(id) {
@@ -5055,6 +5123,15 @@ const server = http.createServer(async (req, res) => {
       }
       if (pn === '/api/library/playlists' || pn === '/api/user/playlists') {
         sendJSON(res, await handleLibraryPlaylists());
+        return;
+      }
+      if (pn === '/api/library/albums' || pn === '/api/albums') {
+        sendJSON(res, await handleLibraryAlbums(
+          url.searchParams.get('offset') || 0,
+          url.searchParams.get('limit') || 48,
+          url.searchParams.get('source') || url.searchParams.get('provider') || '',
+          url.searchParams.get('sort') || 'alphabeticalByName'
+        ));
         return;
       }
       if (pn === '/api/library/playlist/tracks' || pn === '/api/playlist/tracks') {

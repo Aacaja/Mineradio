@@ -333,14 +333,33 @@ class NavidromeClient {
     }));
   }
 
-  async albumList(type, size, offset) {
+  async albumListPage(type, size, offset) {
     const root = await this.request('getAlbumList2', {
       type: text(type, 'newest'),
       size: Math.max(1, Math.min(500, number(size, 50))),
       offset: Math.max(0, number(offset)),
     });
-    const list = root.albumList2 && root.albumList2.album || root.albumList && root.albumList.album || [];
-    return Array.isArray(list) ? list.map(mapAlbum).filter(item => item.id) : [];
+    const payload = root.albumList2 || root.albumList || {};
+    const list = Array.isArray(payload.album) ? payload.album : [];
+    const albums = list.map(mapAlbum).filter(item => item.id);
+    const start = Math.max(0, number(offset));
+    const pageSize = Math.max(1, Math.min(500, number(size, 50)));
+    const reportedTotal = number(payload.total) || number(payload.count) || 0;
+    return {
+      albums,
+      total: reportedTotal || null,
+      offset: start,
+      limit: pageSize,
+      nextOffset: start + list.length,
+      // Some Subsonic implementations omit `total`; a full page is still a
+      // useful continuation hint and the next request will terminate cleanly
+      // with an empty page when the catalogue ends.
+      hasMore: reportedTotal > start + list.length || (!reportedTotal && list.length >= pageSize),
+    };
+  }
+
+  async albumList(type, size, offset) {
+    return (await this.albumListPage(type, size, offset)).albums;
   }
 
   async randomSongs(size) {
@@ -378,7 +397,10 @@ class NavidromeClient {
     const root = await this.request('getAlbum', { id: text(id) });
     const payload = root.album || {};
     const songs = Array.isArray(payload.song) ? payload.song.map(mapTrack).filter(item => item.id) : [];
-    return { album: mapAlbum(payload), songs, tracks: songs, total: songs.length };
+    const album = mapAlbum(payload);
+    if (!album.cover && songs[0] && songs[0].cover) album.cover = songs[0].cover;
+    if (!album.songCount) album.songCount = songs.length;
+    return { album, songs, tracks: songs, total: songs.length };
   }
 
   async artist(id) {
