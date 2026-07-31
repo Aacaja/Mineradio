@@ -4,7 +4,7 @@
 
 A 是当前仓库维护者在原开源 Electron 音乐播放器基础上的个人魔改开发版。它把个人 Navidrome 音乐服务器、本地音乐库、歌词舞台、粒子视觉和 3D 歌单架组合在一起，重点服务于“管理自己的音乐并直接播放”的使用场景。
 
-> 当前文档中的产品名称统一为 **A**。本次只同步 Markdown 文档，源码和构建配置中仍保留部分原有兼容标识（例如 `MINERADIO_*` 环境变量、API 路径、Electron IPC 名称和 Windows 产物文件名），这些标识暂时不能直接改名。
+> 当前文档、运行时界面和 Windows 构建配置中的产品名称统一为 **A**。源码仍保留部分原有兼容标识（例如 `MINERADIO_*` 环境变量、API 路径和 Electron IPC 名称），这些内部标识不能直接改名，否则会破坏现有配置和用户数据。
 
 ## 当前版本
 
@@ -90,7 +90,7 @@ node tests/library-media-regressions.test.js
 4. 构建完成后，在对应运行记录的 `Artifacts` 中下载 Windows 构建产物。
 5. 解压后运行其中的 `*-Setup.exe`。
 
-工作流会在 Windows runner 上执行依赖安装、媒体回归测试和 `npm run build:win`。当前 Artifact 和安装包仍沿用源码中的内部文件名 `Mineradio-Windows-*`、`Mineradio-*-Setup.exe`；这不影响文档和产品名称使用 A。工作流只上传构建产物，不会上传 Navidrome 地址、账号密码或本地音乐文件。
+工作流会在 Windows runner 上执行依赖安装、媒体回归测试和 `npm run build:win`。当前 Artifact 和安装包使用 A 的产品文件名；工作流只上传构建产物，不会上传 Navidrome 地址、账号密码或本地音乐文件。
 
 ## 使用限制与隐私
 

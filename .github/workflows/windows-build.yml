@@ -42,10 +42,10 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: Mineradio-Windows-${{ github.ref_name }}-${{ github.run_number }}
+          name: A-Windows-${{ github.ref_name }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |
-            dist/Mineradio-*-Setup.exe
+            dist/A-*-Setup.exe
             dist/*.blockmap
             dist/latest.yml

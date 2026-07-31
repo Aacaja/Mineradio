@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title Start Mineradio
+title Start A
 
 set "APP_DIR=%~dp0"
 set "ELECTRON_EXE=%APP_DIR%node_modules\electron\dist\electron.exe"
@@ -16,9 +16,9 @@ if not exist "%ELECTRON_EXE%" (
   goto :fail
 )
 
-echo Starting Mineradio...
+echo Starting A...
 echo App: %APP_DIR%
-start "Mineradio" "%ELECTRON_EXE%" .
+start "A" "%ELECTRON_EXE%" .
 exit /b 0
 
 :fail

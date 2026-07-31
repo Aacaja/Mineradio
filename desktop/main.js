@@ -106,9 +106,10 @@ const APP_PACKAGE_INFO = (() => {
   }
 })();
 const APP_METADATA = APP_PACKAGE_INFO.mineradio || {};
-const APP_NAME = process.env.MINERADIO_RUNTIME_NAME || APP_METADATA.runtimeName || APP_PACKAGE_INFO.productName || 'Mineradio';
-const APP_USER_MODEL_ID = process.env.MINERADIO_APP_USER_MODEL_ID || APP_METADATA.appUserModelId || (APP_PACKAGE_INFO.build && APP_PACKAGE_INFO.build.appId) || 'com.mineradio.desktop';
+const APP_NAME = process.env.MINERADIO_RUNTIME_NAME || APP_METADATA.runtimeName || APP_PACKAGE_INFO.productName || 'A';
+const APP_USER_MODEL_ID = process.env.MINERADIO_APP_USER_MODEL_ID || APP_METADATA.appUserModelId || (APP_PACKAGE_INFO.build && APP_PACKAGE_INFO.build.appId) || 'com.a.desktop';
 const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
+const LEGACY_APP_NAME = 'Mineradio';
 const CURRENT_FX_AUTOSAVE_FILE = 'current-fx-autosave.json';
 const CURRENT_FX_AUTOSAVE_MAX_BYTES = 12 * 1024 * 1024;
 const STARTUP_ERROR_LOG_FILE = 'startup-error.log';
@@ -144,12 +145,16 @@ const QISHUI_OFFICIAL_CLIENT_DATA_DIRS = (process.env.QISHUI_OFFICIAL_CLIENT_DAT
 // user-selectable Chromium cache. app.setName() must run before the first
 // derived path lookup or Electron can recompute userData below the cache root.
 app.setName(APP_NAME);
+const APP_DATA_ROOT = app.getPath('appData');
 const STARTUP_QA_USER_DATA_PATH = (() => {
   const value = String(process.env.MINERADIO_STARTUP_QA_USER_DATA || '').trim();
   if (process.env.MINERADIO_STARTUP_QA_HIDDEN !== '1' || !value || !path.isAbsolute(value)) return '';
   return path.resolve(value);
 })();
 const STABLE_USER_DATA_PATH = STARTUP_QA_USER_DATA_PATH || path.join(app.getPath('appData'), APP_NAME);
+if (!STARTUP_QA_USER_DATA_PATH && APP_NAME !== LEGACY_APP_NAME) {
+  migrateLegacyUserDataDirectory(path.join(APP_DATA_ROOT, LEGACY_APP_NAME), STABLE_USER_DATA_PATH);
+}
 fs.mkdirSync(STABLE_USER_DATA_PATH, { recursive: true });
 app.setPath('userData', STABLE_USER_DATA_PATH);
 const INITIAL_CACHE_SETTINGS = ensureCacheDirectories(readCacheSettings());
@@ -285,6 +290,59 @@ function defaultCacheRootPath() {
   return fs.existsSync(dDrive)
     ? path.join(dDrive, 'MineradioCache')
     : path.join(app.getPath('userData'), 'cache');
+}
+
+function copyMissingLegacyUserData(source, target) {
+  if (!source || !target || !fs.existsSync(source)) return 0;
+  const legacyEntries = [
+    'navidrome-profiles.json',
+    'local-library.json',
+    'local-library-cache',
+    'cache-settings.json',
+    'cache',
+    'current-fx-autosave.json',
+    'desktop-behavior.json',
+    'cuefield-feedback.jsonl',
+    'listen-sync-journal.json',
+    '.cookie',
+    '.qq-cookie',
+    '.kugou-cookie',
+    '.qishui-cookie',
+    '.qishui-token',
+    '.qishui-oauth.json',
+    '.spotify-token.json',
+    '.spotify-credentials.json',
+  ];
+  let copied = 0;
+  fs.mkdirSync(target, { recursive: true });
+  for (const name of legacyEntries) {
+    const from = path.join(source, name);
+    const to = path.join(target, name);
+    if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+    try {
+      const stat = fs.lstatSync(from);
+      if (stat.isDirectory()) {
+        fs.cpSync(from, to, { recursive: true, force: false, errorOnExist: false });
+      } else if (stat.isFile()) {
+        fs.copyFileSync(from, to);
+      } else {
+        continue;
+      }
+      copied += 1;
+    } catch (error) {
+      console.warn('[UserDataMigration] legacy A brand migration skipped', name, error.message);
+    }
+  }
+  return copied;
+}
+
+function migrateLegacyUserDataDirectory(source, target) {
+  try {
+    const copied = copyMissingLegacyUserData(source, target);
+    if (copied) console.log('[UserDataMigration] copied legacy Mineradio data into A:', copied);
+  } catch (error) {
+    console.warn('[UserDataMigration] legacy Mineradio data migration skipped:', error.message);
+  }
 }
 
 function normalizeCacheRootPath(value) {
@@ -2372,8 +2430,8 @@ function reportWindowCreationFailure(context, error) {
     startupErrorReported = true;
     try {
       // Keep this literal visible for startup dialog regression checks:
-      // dialog.showErrorBox('Mineradio 启动失败'
-      dialog.showErrorBox(`Mineradio 启动失败 (${code})`, buildStartupErrorMessage(context, code, logInfo, error));
+      // dialog.showErrorBox('A 启动失败'
+      dialog.showErrorBox(`A 启动失败 (${code})`, buildStartupErrorMessage(context, code, logInfo, error));
     } catch (_) {}
   }
   if (!startupCompleted) {
@@ -3388,7 +3446,7 @@ async function openQishuiOfficialWebLoginWindow(owner, config) {
         '</style><main>',
         '<div class="brand">QISHUI MUSIC</div>',
         '<h1>使用汽水音乐 App 扫码</h1>',
-        '<p>请用汽水音乐 App 扫码并确认。确认后 Mineradio 会自动保存汽水登录态，同步汽水歌单与我的喜欢。</p>',
+        '<p>请用汽水音乐 App 扫码并确认。确认后 A 会自动保存汽水登录态，同步汽水歌单与我的喜欢。</p>',
         qrImg ? ('<div class="qr"><img src="' + escaped(qrImg) + '" alt="汽水音乐扫码登录"></div>') : '',
         '<div class="status" id="status">' + escaped(statusLine) + '</div>',
         qrPayload && qrPayload.qrcodeIndexUrl ? '<p>这个二维码来自汽水 PC 登录接口；抖音 App 扫描可能打开 404 页面，请用汽水音乐 App。</p>' : '',
@@ -3781,11 +3839,11 @@ async function openQishuiMusicLoginWindow(owner) {
       source: imported.source,
       importMethod: imported.method || 'cookie-db',
       localSessionDiagnostics: imported.diagnostics || null,
-      message: '已读取本机汽水 PC 登录态，正在导入 Mineradio 并同步我的喜欢和歌单',
+      message: '已读取本机汽水 PC 登录态，正在导入 A 并同步我的喜欢和歌单',
     };
   }
 
-  // Reuse Mineradio's last imported copy only when the official client data is
+  // Reuse A's last imported copy only when the official client data is
   // temporarily unavailable. This keeps normal use stable without ever
   // falling through to the obsolete QR/OAuth flows.
   const saved = readSavedQishuiCookieHeader();
@@ -3817,8 +3875,8 @@ async function openQishuiMusicLoginWindow(owner) {
       importMethod: saved.method,
       localSessionDiagnostics: imported && imported.diagnostics || null,
       message: imported && imported.locked
-        ? '本机汽水登录数据库暂时被占用，已继续使用 Mineradio 上次导入的有效登录态。'
-        : '已继续使用 Mineradio 上次从本机汽水 PC 导入的登录态。',
+        ? '本机汽水登录数据库暂时被占用，已继续使用 A 上次导入的有效登录态。'
+        : '已继续使用 A 上次从本机汽水 PC 导入的登录态。',
     };
   }
 
@@ -3926,7 +3984,7 @@ function startSpotifyOAuthCallbackServer(redirectUri, onCallback) {
         const result = await onCallback(current);
         const ok = !!(result && result.ok);
         res.writeHead(ok ? 200 : 500, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(spotifyOAuthResultHtml(ok, (result && (result.message || result.error)) || (ok ? '可以回到 Mineradio。' : '请回到 Mineradio 重新尝试。')));
+        res.end(spotifyOAuthResultHtml(ok, (result && (result.message || result.error)) || (ok ? '可以回到 A。' : '请回到 A 重新尝试。')));
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(spotifyOAuthResultHtml(false, e && e.message || 'SPOTIFY_OAUTH_CALLBACK_FAILED'));
@@ -4547,7 +4605,7 @@ function createDesktopLyricsWindow(payload = {}) {
     focusable: false,
     skipTaskbar: true,
     show: false,
-    title: 'Mineradio Desktop Lyrics',
+    title: 'A Desktop Lyrics',
     webPreferences: {
       preload: path.join(__dirname, 'overlay-preload.js'),
       contextIsolation: true,
@@ -4820,7 +4878,7 @@ ipcMain.handle('mineradio-memory-purge-system', async (_event, payload = {}) => 
     if (isMainWindowForegroundVisible()) {
       return {
         ok: true,
-        result: { ok: false, skipped: true, reason: 'foreground-visible', message: 'System memory purge is skipped while Mineradio is visible.' },
+        result: { ok: false, skipped: true, reason: 'foreground-visible', message: 'System memory purge is skipped while A is visible.' },
         snapshot: systemMemory.getMemorySnapshot(),
         elevated: false,
         systemPurgeAvailable: systemMemory.SYSTEM_PURGE_AVAILABLE === true,
@@ -4859,7 +4917,7 @@ ipcMain.handle('mineradio-cache-get-settings', async () => {
 
 ipcMain.handle('mineradio-cache-choose-directory', async () => {
   const result = await dialog.showOpenDialog({
-    title: '选择 Mineradio 缓存目录',
+    title: '选择 A 缓存目录',
     defaultPath: cacheSettings.rootPath,
     properties: ['openDirectory', 'createDirectory'],
   });
@@ -5358,9 +5416,9 @@ ipcMain.handle('mineradio-export-login-cookie', async (_event, provider) => {
 ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
   try {
     const owner = getSenderWindow(event);
-    const defaultName = String(payload.defaultName || 'mineradio-export.json').replace(/[\\/:*?"<>|]+/g, '-');
+    const defaultName = String(payload.defaultName || 'a-export.json').replace(/[\\/:*?"<>|]+/g, '-');
     const result = await dialog.showSaveDialog(owner, {
-      title: '导出 Mineradio 存档',
+      title: '导出 A 存档',
       defaultPath: defaultName.toLowerCase().endsWith('.json') ? defaultName : `${defaultName}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -5377,7 +5435,7 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '导入 Mineradio 存档',
+      title: '导入 A 存档',
       properties: ['openFile'],
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -5753,6 +5811,11 @@ function migrateMisplacedAppOwnedFiles() {
   };
   try { addSource(app.getPath('sessionData')); } catch (_) {}
   addSource(chromiumSessionDataPath(cacheSettings));
+  if (APP_NAME !== LEGACY_APP_NAME) {
+    try {
+      addSource(path.join(cacheSettings.chromiumPath, LEGACY_APP_NAME));
+    } catch (_) {}
+  }
 
   fs.mkdirSync(STABLE_USER_DATA_PATH, { recursive: true });
   APP_OWNED_MIGRATION_FILES.forEach((name) => {

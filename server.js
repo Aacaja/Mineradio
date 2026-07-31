@@ -730,7 +730,7 @@ function normalizeManifestUpdateInfo(data) {
     latestVersion,
     release: {
       tagName: release.tagName || release.tag_name || data.tagName || ('v' + latestVersion),
-      name: release.name || data.name || ('Mineradio v' + latestVersion),
+      name: release.name || data.name || ('A v' + latestVersion),
       version: latestVersion,
       publishedAt: release.publishedAt || release.published_at || data.publishedAt || '',
       htmlUrl,
@@ -752,7 +752,7 @@ async function readUpdateManifest(ref) {
   if (!value) throw new Error('UPDATE_MANIFEST_MISSING');
   if (/^https?:\/\//i.test(value)) {
     const resp = await fetch(value, {
-      headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
+      headers: { 'User-Agent': `A/${APP_VERSION}` },
     });
     if (!resp.ok) throw new Error('Update manifest ' + resp.status);
     return resp.json();
@@ -844,7 +844,7 @@ function localUpdateFallback(reason, opts) {
     latestVersion: APP_VERSION,
     release: {
       tagName: 'v' + APP_VERSION,
-      name: 'Mineradio v' + APP_VERSION,
+      name: 'A v' + APP_VERSION,
       version: APP_VERSION,
       htmlUrl: '',
       externalUrl: '',
@@ -943,7 +943,7 @@ async function fetchTextFromCandidates(candidates, timeoutMs) {
     const candidate = list[i];
     try {
       const resp = await fetchWithTimeout(candidate.url, {
-        headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
+        headers: { 'User-Agent': `A/${APP_VERSION}` },
       }, timeoutMs || 6500);
       if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
       return { text: await resp.text(), candidate };
@@ -972,7 +972,7 @@ function parseLatestYmlUpdateInfo(text, reason) {
     latestVersion,
     release: {
       tagName: 'v' + latestVersion,
-      name: 'Mineradio v' + latestVersion,
+      name: 'A v' + latestVersion,
       version: latestVersion,
       publishedAt: releaseDate,
       htmlUrl,
@@ -984,7 +984,7 @@ function parseLatestYmlUpdateInfo(text, reason) {
       patch: null,
       patchAvailable: false,
       summary: '发现新版本，请前往发布页面获取安装包。',
-      notes: ['更新入口已改为浏览器外部下载', 'Mineradio 不再在本地下载或应用补丁'],
+      notes: ['更新入口已改为浏览器外部下载', 'A 不再在本地下载或应用补丁'],
     },
     source: 'latest-yml',
     reason: reason || '',
@@ -1007,7 +1007,7 @@ async function fetchLatestUpdateInfo() {
     const resp = await fetch(apiUrl, {
       signal: controller.signal,
       headers: {
-        'User-Agent': `Mineradio/${APP_VERSION}`,
+        'User-Agent': `A/${APP_VERSION}`,
         'Accept': 'application/vnd.github+json',
       },
     });
@@ -1030,7 +1030,7 @@ async function fetchLatestUpdateInfo() {
       latestVersion,
       release: {
         tagName: data.tag_name || ('v' + latestVersion),
-        name: data.name || ('Mineradio v' + latestVersion),
+        name: data.name || ('A v' + latestVersion),
         version: latestVersion,
         publishedAt: data.published_at || '',
         htmlUrl,
@@ -5215,7 +5215,7 @@ const server = http.createServer(async (req, res) => {
         const body = await readRequestBody(req);
         if (!navidromeClient.configured) { sendJSON(res, { success: false, error: 'NAVIDROME_NOT_CONFIGURED' }, 401); return; }
         const song = body.song || body.track || {};
-        const created = await navidromeClient.createPlaylist(body.name || body.title || 'Mineradio 歌单', librarySongId(song) && !librarySongId(song).startsWith('local:') ? [librarySongId(song)] : []);
+        const created = await navidromeClient.createPlaylist(body.name || body.title || 'A 歌单', librarySongId(song) && !librarySongId(song).startsWith('local:') ? [librarySongId(song)] : []);
         sendJSON(res, { provider: 'navidrome', playlist: created, id: created.id, created: true, success: true });
         return;
       }
@@ -5267,7 +5267,7 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/app/version') {
     sendJSON(res, {
       name: APP_PACKAGE.name || 'mineradio',
-      productName: APP_PACKAGE.productName || 'Mineradio',
+      productName: APP_PACKAGE.productName || 'A',
       version: APP_VERSION,
       update: {
         provider: UPDATE_CONFIG.provider,
@@ -5383,7 +5383,7 @@ const server = http.createServer(async (req, res) => {
       ok: false,
       externalOnly: true,
       error: 'UPDATE_EXTERNAL_ONLY',
-      message: 'Mineradio 已停用客户端本地下载与快速补丁，请使用外部下载页面。',
+      message: 'A 已停用客户端本地下载与快速补丁，请使用外部下载页面。',
     }, 410);
     return;
   }

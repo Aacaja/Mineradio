@@ -2455,7 +2455,7 @@ async function checkProviderAuthCookiePathGuard() {
   if (!/async function loadMainWindowWithRetry\(win\)/.test(mainText) || !/const port = mainServerPort \|\| process\.env\.PORT \|\| 3000/.test(mainText) || !/win\.loadURL\(targetUrl\)/.test(mainText)) {
     fail('Main window navigation must use the configured server port through the bounded retry path');
   }
-  if (!/function reportWindowCreationFailure\(context, error\)/.test(mainText) || !/dialog\.showErrorBox\('Mineradio 启动失败'/.test(mainText)) {
+  if (!/function reportWindowCreationFailure\(context, error\)/.test(mainText) || !/dialog\.showErrorBox\('A 启动失败'/.test(mainText)) {
     fail('Main window startup failures must be surfaced instead of leaving a headless server process');
   }
   if (!/function resolveStartupErrorCode\(context, error\)/.test(mainText) || !/STARTUP_ERROR_LOG_FILE/.test(mainText) || !/MR-BOOT-SERVER-PORT/.test(mainText) || !/MR-BOOT-WINDOW-LOAD/.test(mainText) || !/startup-error\.log/.test(mainText)) {
@@ -2892,8 +2892,8 @@ function checkInternalBetaPackagingGuard() {
   const meta = beta.extraMetadata || {};
   const mineradio = meta.mineradio || {};
   const update = mineradio.update || {};
-  if (meta.version !== '1.1.2' || beta.productName !== 'Mineradio_Beat' || meta.productName !== 'Mineradio_Beat') {
-    fail('internal beta package metadata must identify v1.1.2 Mineradio_Beat');
+  if (meta.version !== '1.1.2' || beta.productName !== 'A' || meta.productName !== 'A') {
+    fail('internal beta package metadata must identify v1.1.2 A');
   }
   if (!/dist-internal-beta/.test(beta.directories && beta.directories.output || '') || beta.publish !== null) {
     fail('internal beta output must stay in dist-internal-beta and not configure GitHub publishing');
@@ -2901,10 +2901,10 @@ function checkInternalBetaPackagingGuard() {
   if (beta.asar !== true) {
     fail('internal beta package must use asar so source files are not installed as plain resources');
   }
-  if ((beta.appId || '') !== 'com.mineradio.beat.internal' || (mineradio.appUserModelId || '') !== 'com.mineradio.beat.internal') {
+  if ((beta.appId || '') !== 'com.a.desktop.internal' || (mineradio.appUserModelId || '') !== 'com.a.desktop.internal') {
     fail('internal beta must use an isolated app id/AppUserModelID');
   }
-  if (mineradio.runtimeName !== 'Mineradio_Beat' || update.disabled !== true || update.provider !== 'none') {
+  if (mineradio.runtimeName !== 'A' || update.disabled !== true || update.provider !== 'none') {
     fail('internal beta runtime name and update-disable metadata must stay isolated');
   }
   const requiredRuntimeFiles = ['qishui-audio-decryptor/**/*'];
@@ -2915,12 +2915,12 @@ function checkInternalBetaPackagingGuard() {
       fail(`electron-builder files must include runtime dependency ${entry}`);
     }
   });
-  if (!beta.nsis || beta.nsis.include !== 'build/installer-internal-beta.nsh' || !/Mineradio_Beat-v\$\{version\}-灰度内测版/.test(beta.nsis.artifactName || '')) {
+  if (!beta.nsis || beta.nsis.include !== 'build/installer-internal-beta.nsh' || !/A-v\$\{version\}-灰度内测版/.test(beta.nsis.artifactName || '')) {
     fail('internal beta NSIS config must use the beta wrapper and beta artifact name');
   }
   const wrapperText = fs.readFileSync(path.join(appRoot, 'build', 'installer-internal-beta.nsh'), 'utf8');
-  if (!/MINERADIO_INSTALL_DIR_NAME "Mineradio_Beat"/.test(wrapperText) || !/禁止传播/.test(wrapperText) || !/installer\.nsh/.test(wrapperText)) {
-    fail('internal beta NSIS wrapper must define Mineradio_Beat and the no-redistribution notice');
+  if (!/MINERADIO_INSTALL_DIR_NAME "A"/.test(wrapperText) || !/禁止传播/.test(wrapperText) || !/installer\.nsh/.test(wrapperText)) {
+    fail('internal beta NSIS wrapper must define A and the no-redistribution notice');
   }
   const installerText = fs.readFileSync(path.join(appRoot, 'build', 'installer.nsh'), 'utf8');
   if (!/MINERADIO_INSTALL_DIR_NAME/.test(installerText) || !/MINERADIO_INSTALL_NOTICE/.test(installerText)) {

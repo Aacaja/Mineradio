@@ -149,7 +149,7 @@ function publicPlaylist(raw) {
     cover: text(raw.cover),
     trackCount: trackIds.length || number(raw.trackCount),
     trackIds,
-    creator: 'Mineradio 本地媒体库',
+    creator: 'A 本地媒体库',
     readOnly: raw.readOnly !== false,
     auto: raw.auto !== false,
     kind: text(raw.kind, 'auto'),

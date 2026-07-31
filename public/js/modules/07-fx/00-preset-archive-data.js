@@ -45,7 +45,8 @@ var lyricColorPresets = [
 var USER_FX_ARCHIVE_STORE_KEY = 'mineradio-user-fx-archives-v1';
 var USER_FX_ARCHIVE_EXPORT_TYPE = 'mineradio-user-fx-archive';
 var USER_FX_ARCHIVE_SCHEMA = 1;
-var USER_FX_SHARE_PREFIX = 'MR2';
+var USER_FX_SHARE_PREFIX = 'A2';
+var USER_FX_SHARE_LEGACY_PREFIX = 'MR2';
 var USER_FX_SHARE_VERSION = 1;
 var USER_FX_SHARE_PAYLOAD_TYPE = 'ufa';
 var USER_FX_SHARE_CODEC_GZIP = 'G';
@@ -940,8 +941,8 @@ async function encodeUserFxArchiveShareCode(slot) {
 function extractUserFxShareCode(text) {
   text = String(text || '').trim();
   var direct = text.replace(/\s+/g, '');
-  if (/^MR2:[0-9]+\.[A-Za-z][A-Za-z0-9_-]+\.[A-Za-z0-9]+$/.test(direct)) return direct;
-  var match = text.match(/MR2:[0-9]+\.[A-Za-z][A-Za-z0-9_-]+\.[A-Za-z0-9]+/);
+  if (/^(?:A2|MR2):[0-9]+\.[A-Za-z][A-Za-z0-9_-]+\.[A-Za-z0-9]+$/.test(direct)) return direct;
+  var match = text.match(/(?:A2|MR2):[0-9]+\.[A-Za-z][A-Za-z0-9_-]+\.[A-Za-z0-9]+/);
   return match ? match[0] : '';
 }
 function looksLikeUserFxShareCode(text) {
@@ -950,7 +951,10 @@ function looksLikeUserFxShareCode(text) {
 async function decodeUserFxArchiveShareCode(text) {
   var code = extractUserFxShareCode(text);
   if (!code) throw new Error('INVALID_SHARE_CODE');
-  var parts = code.slice((USER_FX_SHARE_PREFIX + ':').length).split('.');
+  var prefixEnd = code.indexOf(':');
+  var prefix = prefixEnd > 0 ? code.slice(0, prefixEnd) : '';
+  if (prefix !== USER_FX_SHARE_PREFIX && prefix !== USER_FX_SHARE_LEGACY_PREFIX) throw new Error('INVALID_SHARE_CODE');
+  var parts = code.slice(prefixEnd + 1).split('.');
   if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) throw new Error('INVALID_SHARE_CODE');
   var version = parts[0];
   var body = parts[1];
@@ -1054,7 +1058,7 @@ async function copyUserFxArchiveShareCode(index) {
     if (copied) {
       showToast(code.length > 12000 ? '完整短码已复制，配置较长' : '用户存档短码已复制');
     } else {
-      window.prompt('复制这段 MR2 短代码', code);
+      window.prompt('复制这段 A2 短代码', code);
       showToast('已打开完整短码');
     }
   } catch (e) {
@@ -1109,7 +1113,7 @@ async function importUserFxArchiveShareCodeFromBox() {
   var text = input ? input.value : userFxArchiveShareDraft;
   userFxArchiveShareDraft = String(text || '');
   if (!userFxArchiveShareDraft.trim()) {
-    showToast('先把 MR2 短码粘到输入框');
+    showToast('先把 A2 短码粘到输入框');
     focusUserFxArchiveShareInput(false);
     return false;
   }
@@ -1142,7 +1146,7 @@ function renderUserFxArchives() {
   if (!grid) return;
   var toolbar =
     '<div class="user-archive-toolbar">' +
-    '<div class="user-archive-note">主入口使用 MR2 短代码复制/粘贴；旧 JSON 仍可拖拽或作为兼容备份导入。</div>' +
+    '<div class="user-archive-note">主入口使用 A2 短代码复制/粘贴；旧 MR2 短代码和 JSON 仍可作为兼容备份导入。</div>' +
     '<div class="user-archive-tools">' +
     '<button class="fx-mini-btn ghost" type="button" onclick="createUserFxArchive()">新建</button>' +
     '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromShareCodePrompt()">粘贴码</button>' +
@@ -1151,7 +1155,7 @@ function renderUserFxArchives() {
     '</div>';
   var shareBox =
     '<div class="user-archive-share-panel">' +
-    '<textarea id="user-archive-share-input" class="user-archive-share-input" spellcheck="false" placeholder="把 MR2 短代码粘到这里，也兼容旧 JSON 存档" oninput="updateUserFxArchiveShareDraft(this.value)" onkeydown="handleUserFxArchiveShareInputKey(event)">' + escHtml(userFxArchiveShareDraft) + '</textarea>' +
+    '<textarea id="user-archive-share-input" class="user-archive-share-input" spellcheck="false" placeholder="把 A2 短代码粘到这里，也兼容旧 MR2 / JSON 存档" oninput="updateUserFxArchiveShareDraft(this.value)" onkeydown="handleUserFxArchiveShareInputKey(event)">' + escHtml(userFxArchiveShareDraft) + '</textarea>' +
     '<div class="user-archive-share-actions">' +
     '<button type="button" onclick="pasteUserFxArchiveShareCodeToBox()">从剪贴板粘贴</button>' +
     '<button type="button" onclick="importUserFxArchiveShareCodeFromBox()">导入短码</button>' +
@@ -1263,7 +1267,7 @@ function userFxArchiveExportPayload(slot) {
   };
 }
 function safeArchiveFileName(name) {
-  return String(name || 'Mineradio 用户存档').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 48) + '.json';
+  return String(name || 'A 用户存档').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 48) + '.json';
 }
 function exportUserFxArchive(index) {
   var slot = userFxArchiveAt(index);

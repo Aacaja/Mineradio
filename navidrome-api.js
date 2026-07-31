@@ -1,12 +1,12 @@
 'use strict';
 
-// Small Subsonic/OpenSubsonic client used by the local Mineradio gateway.
+// Small Subsonic/OpenSubsonic client used by the local A gateway.
 // Credentials deliberately stay in this process; callers only receive the
 // normalized media records and same-origin proxy URLs.
 const crypto = require('crypto');
 
 const SUBSONIC_VERSION = '1.16.1';
-const CLIENT_NAME = 'Mineradio';
+const CLIENT_NAME = 'A';
 
 class NavidromeError extends Error {
   constructor(message, code, statusCode, details) {
@@ -408,7 +408,7 @@ class NavidromeClient {
     const payload = root.artist || {};
     const albums = Array.isArray(payload.album) ? payload.album.map(mapAlbum).filter(item => item.id) : [];
     // Subsonic's getArtist response contains album summaries rather than a
-    // flat hot-song list.  Resolve those summaries so Mineradio's artist
+    // flat hot-song list.  Resolve those summaries so A's artist
     // detail view can still play the artist's catalogue.
     const albumResults = await Promise.allSettled(albums.slice(0, 24).map(album => this.album(album.id)));
     const seen = new Set();
@@ -469,7 +469,7 @@ class NavidromeClient {
   }
 
   async createPlaylist(name, songIds) {
-    const root = await this.request('createPlaylist', { name: text(name, 'Mineradio 歌单'), songId: (songIds || []).map(text) });
+    const root = await this.request('createPlaylist', { name: text(name, 'A 歌单'), songId: (songIds || []).map(text) });
     return mapPlaylist(root.playlist || {});
   }
 

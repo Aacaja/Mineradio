@@ -55,7 +55,7 @@ function updateDevelopmentFxControls() {
     ['desktopLyricsClickThrough', 't-desktopLyricsClickThrough', '锁定后防误触；鼠标移到桌面歌词上按中键可锁定/解锁'],
     ['desktopLyricsCinema', 't-desktopLyricsCinema', '桌面歌词绑定鼓点电影震动，基础漂浮始终保留'],
     ['desktopLyricsHighlight', 't-desktopLyricsHighlight', '桌面歌词按播放进度高亮'],
-    ['wallpaperMode', 't-wallpaperMode', '把完整 Mineradio 放到 Windows 桌面；右上控制器可显示、隐藏桌面图标；Esc 退出；重启默认关闭']
+    ['wallpaperMode', 't-wallpaperMode', '把完整 A 放到 Windows 桌面；右上控制器可显示、隐藏桌面图标；Esc 退出；重启默认关闭']
   ].forEach(function (item) {
     var runtimeUnavailable = item[0] === 'wallpaperMode'
       && typeof desktopWallpaperRuntimeState !== 'undefined'

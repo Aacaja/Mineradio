@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mineradio Sonic Workshop Bridge</title>
+    <title>A Sonic Workshop Bridge</title>
     <link rel="icon" href="data:,">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -98,7 +98,7 @@
         function cloneMineradioTheme(theme) {
           if (!theme) return null;
           var out = {
-            name: theme.name || 'Mineradio Region Palette',
+            name: theme.name || 'A Region Palette',
             id: theme.id || 'mineradio-custom',
             __primaryColor: normalizeHex(theme.__primaryColor || '#cb6c89', '#cb6c89'),
             uGlowIntensity: Number(theme.uGlowIntensity) || 1
@@ -122,7 +122,7 @@
           to = cloneMineradioTheme(to) || cloneMineradioTheme(from);
           t = clamp01(t);
           var out = {
-            name: to.name || from.name || 'Mineradio Region Palette',
+            name: to.name || from.name || 'A Region Palette',
             id: to.id || from.id || 'mineradio-custom',
             __primaryColor: mixHex(from.__primaryColor, to.__primaryColor, t),
             uGlowIntensity: Number((from.uGlowIntensity + (to.uGlowIntensity - from.uGlowIntensity) * t).toFixed(3))

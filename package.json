@@ -1,9 +1,9 @@
 {
-  "name": "mineradio",
-  "productName": "Mineradio",
+  "name": "a",
+  "productName": "A",
   "version": "2.0.3",
   "description": "Windows 沉浸式音乐播放器，融合桌面模式、歌词舞台、粒子视觉和 3D 歌单架。",
-  "author": "Mineradio",
+  "author": "A",
   "license": "GPL-3.0-only",
   "main": "desktop/main.js",
   "private": true,
@@ -14,8 +14,8 @@
     "build:win:internal-beta": "electron-builder --config electron-builder.internal-beta.json --win nsis --publish never"
   },
   "build": {
-    "appId": "com.mineradio.desktop",
-    "productName": "Mineradio",
+    "appId": "com.a.desktop",
+    "productName": "A",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -45,7 +45,7 @@
     ],
     "asar": false,
     "win": {
-      "executableName": "Mineradio",
+      "executableName": "A",
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
@@ -63,14 +63,14 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mineradio",
+      "shortcutName": "A",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "include": "build/installer.nsh",
-      "artifactName": "Mineradio-${version}-Setup.${ext}"
+      "artifactName": "A-${version}-Setup.${ext}"
     },
     "publish": [
       {

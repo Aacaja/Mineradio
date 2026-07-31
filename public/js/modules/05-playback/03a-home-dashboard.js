@@ -39,7 +39,7 @@ var HOME_DASHBOARD_REVIEW_DEFAULTS = [
   { text: '错过落日余晖，还会有满天星辰。', source: '每日热评' },
   { text: '保持热爱，奔赴下一场山海。', source: '每日热评' },
   { text: '答案在路上，自由在风里。', source: '每日热评' },
-  { text: '让今天的声音，从你喜欢的地方开始。', source: 'Mineradio' },
+  { text: '让今天的声音，从你喜欢的地方开始。', source: 'A' },
 ];
 
 function homeDashboardSvgText(text) {
@@ -64,7 +64,7 @@ function homeDashboardGeneratedCover(title, label, tone) {
   };
   var palette = palettes[tone] || palettes.playlist;
   var letters = homeDashboardSvgText(homeDashboardCoverInitials(title || label));
-  var sub = homeDashboardSvgText(String(label || 'MINERADIO').toUpperCase().slice(0, 14));
+  var sub = homeDashboardSvgText(String(label || 'A').toUpperCase().slice(0, 14));
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">' +
     '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
     '<stop offset="0" stop-color="' + palette[0] + '"/><stop offset=".52" stop-color="' + palette[1] + '"/>' +
@@ -109,7 +109,7 @@ function homeDashboardDayNumber() {
 
 function homeDashboardSelectedReview() {
   var reviews = homeDashboardReadReviews();
-  if (!reviews.length) return { text: '让今天的声音，从你喜欢的地方开始。', source: 'Mineradio' };
+  if (!reviews.length) return { text: '让今天的声音，从你喜欢的地方开始。', source: 'A' };
   var index = ((homeDashboardDayNumber() + homeDashboardReviewOffset) % reviews.length + reviews.length) % reviews.length;
   return reviews[index];
 }
@@ -565,7 +565,7 @@ function renderHomeDashboardQuickCards() {
     {
       label: 'DAILY MIX',
       title: '每日推荐',
-      sub: daily ? ((daily.name || daily.title || '今日歌曲') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '使用当前 Mineradio 推荐数据',
+      sub: daily ? ((daily.name || daily.title || '今日歌曲') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '使用当前 A 推荐数据',
       cover: homeDashboardSongCover(daily, 260),
       action: 'playHomeDaily()',
       tone: 'mix',
@@ -760,7 +760,7 @@ function renderHomeDashboardDiscovery() {
     return '<button class="home-discovery-song" type="button" onclick="playHomeDashboardDiscoverySong(' + index + ')">' +
       '<span class="home-discovery-cover"' + coverStyle + '></span>' +
       '<span class="home-discovery-song-copy"><span class="home-discovery-song-name">' + escHtml(song.name || song.title || '未知歌曲') + '</span>' +
-      '<span class="home-discovery-song-artist">' + escHtml(homeDashboardSubtitle(song) || 'Mineradio 推荐') + '</span></span></button>';
+      '<span class="home-discovery-song-artist">' + escHtml(homeDashboardSubtitle(song) || 'A 推荐') + '</span></span></button>';
   }).join('');
 }
 

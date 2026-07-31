@@ -493,7 +493,7 @@ function selectLoginMode(mode) {
 }
 function startSelectedLoginConnection() {
   if (!hasLoginWorkflowConnection(loginProvider) && loginWorkflowPendingProvider !== loginProvider) {
-    showToast('先把左侧接口拖到 MR 接入口');
+    showToast('先把左侧接口拖到 A 接入口');
     return;
   }
   setLoginAuthDrawerOpen(true);
@@ -733,7 +733,7 @@ function updateLoginProviderUi() {
     if (title) title.textContent = '连接 Spotify';
     if (desc) desc.innerHTML = canOpenSpotifyOAuth
       ? '粘贴 <b>Spotify Client ID</b> 后保存并授权，用于同步 Premium/Free 状态、歌单和 Liked Songs；播放仍按匹配源自动换源。'
-      : '当前环境不支持桌面授权桥；请在 Mineradio 桌面版中连接 Spotify。';
+      : '当前环境不支持桌面授权桥；请在 A 桌面版中连接 Spotify。';
     if (shell) {
       shell.classList.add('web-login-preview');
       shell.classList.remove('qq-preview', 'netease-preview');
@@ -795,7 +795,7 @@ function updateLoginProviderUi() {
     : (isQishui
       ? (hasQishuiLocalImportBridge
         ? '读取本机 <b>汽水音乐 PC 客户端</b> 的当前登录态，导入后可同步我的喜欢、歌单并解析播放地址。'
-        : '本地汽水登录态只能由 Mineradio 桌面版读取；请在桌面版中完成导入。')
+        : '本地汽水登录态只能由 A 桌面版读取；请在桌面版中完成导入。')
     : (canOpenNeteaseWeb
       ? '打开 <b>网易云音乐官方网页登录窗口</b> 扫码，避开接口二维码风控；成功后会自动同步账号会话。'
       : '使用 <b>网易云音乐 App</b> 扫码，可同步歌单、红心与播客。')));
@@ -964,7 +964,7 @@ async function openSpotifyWebLogin() {
   var api = window.desktopWindow;
   if (!api || !api.isDesktop || typeof api.openSpotifyMusicLogin !== 'function') {
     updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = '当前环境不支持 Spotify 本地授权桥，请使用 Mineradio 桌面版。'; statusEl.className = 'fail'; }
+    if (statusEl) { statusEl.textContent = '当前环境不支持 Spotify 本地授权桥，请使用 A 桌面版。'; statusEl.className = 'fail'; }
     return;
   }
   if (!spotifyLoginStatus.oauthConfigured && !spotifyLoginStatus.tokenConfigured) {
@@ -1206,7 +1206,7 @@ async function openQishuiWebLogin() {
   var api = window.desktopWindow;
   if (!api || !api.isDesktop || typeof api.openQishuiMusicLogin !== 'function') {
     updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = '当前环境不能读取本机汽水 PC 登录态，请使用 Mineradio 桌面版。'; statusEl.className = 'fail'; }
+    if (statusEl) { statusEl.textContent = '当前环境不能读取本机汽水 PC 登录态，请使用 A 桌面版。'; statusEl.className = 'fail'; }
     return;
   }
   qishuiOAuthBusy = true;

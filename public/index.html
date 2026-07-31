@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mineradio</title>
+  <title>A</title>
   <meta name="referrer" content="no-referrer">
   <link
     href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&family=UnifrakturCook:wght@700&display=swap"
@@ -83,10 +83,8 @@
 
       <!-- 主内容 -->
       <div class="splash-content">
-        <div class="splash-wordmark" id="splash-wordmark" aria-label="Mineradio">
-          <span class="splash-word-mine">Mine</span>
-          <span class="splash-word-radio" aria-label="radio">rad<span class="splash-word-i"
-              aria-hidden="true"></span><span class="splash-word-o">o</span></span>
+        <div class="splash-wordmark" id="splash-wordmark" aria-label="A">
+          <span class="splash-word-a">A</span>
         </div>
         <div class="splash-signal-line"></div>
         <div class="splash-sub">private visual radio</div>
@@ -155,15 +153,15 @@
       </div>
     </div>
 
-    <!-- 音乐 Home：只承载当前 Mineradio 数据，不引入外部仓库的服务端接口。 -->
-    <section id="empty-home" aria-label="Mineradio 音乐首页">
+    <!-- 音乐 Home：只承载当前 A 数据，不引入外部仓库的服务端接口。 -->
+    <section id="empty-home" aria-label="A 音乐首页">
       <div class="empty-home-shell">
         <div class="home-hero" aria-live="polite">
           <div class="daily-review-card">
             <div id="daily-review-date" class="daily-review-date"></div>
             <div id="daily-review-time" class="daily-review-time">--:--</div>
             <div class="daily-review-quote">“让今天的声音，从你喜欢的地方开始。”</div>
-            <div class="daily-review-source">— Mineradio</div>
+            <div class="daily-review-source">— A</div>
             <div class="daily-review-actions">
               <button type="button" onclick="homeDashboardNextReview()">换一条</button>
               <button id="home-dashboard-video-choose" type="button" onclick="openHomeDashboardVideoPicker()">选择 MP4</button>
@@ -193,7 +191,7 @@
             onclick="playHomeDaily()">
             <div class="home-card-label">DAILY MIX</div>
             <div class="home-card-title">每日推荐</div>
-            <div class="home-card-sub">使用当前 Mineradio 推荐数据</div>
+            <div class="home-card-sub">使用当前 A 推荐数据</div>
             <div class="home-card-art"></div>
           </button>
           <button class="home-card home-card-quick" data-home-tone="playlist" type="button"
@@ -339,7 +337,7 @@
       <div class="fx-head">
         <div>
           <div class="fx-title">视觉控制台</div>
-          <div class="fx-sub">MINERADIO VISUALS · 鼠标移开自动隐藏</div>
+          <div class="fx-sub">A VISUALS · 鼠标移开自动隐藏</div>
         </div>
       </div>
 
@@ -797,7 +795,7 @@
             <div class="fx-toggle" id="t-desktopLyricsHighlight" onclick="toggleFx('desktopLyricsHighlight')"
               title="桌面歌词按播放进度高亮"><span>桌面歌词高亮跟随</span><span class="dot"></span></div>
             <div class="fx-toggle" id="t-wallpaperMode" onclick="toggleFx('wallpaperMode')"
-              title="把当前完整 Mineradio 放到 Windows 桌面；右上控制器可显示、隐藏桌面图标，Esc 退出">
+              title="把当前完整 A 放到 Windows 桌面；右上控制器可显示、隐藏桌面图标，Esc 退出">
               <span>完整桌面模式<em class="fx-dev-badge">试验</em></span><span class="dot"></span></div>
           </div>
           <div class="fx-section-label">桌面 / 壁纸</div>
@@ -987,7 +985,7 @@
           <div class="fx-sub memory-status-sub" id="memory-status-sub">后台先压缩播放器进程；系统级释放可清工作集、修改页、待机页</div>
           <div class="fx-toggle-grid">
             <div class="fx-toggle" id="t-memoryAutoTrimApp" onclick="toggleFx('memoryAutoTrimApp')"
-              title="最小化、托盘后台或深度后台时压缩 Mineradio / Electron 工作集"><span>自动压缩播放器</span><span class="dot"></span></div>
+              title="最小化、托盘后台或深度后台时压缩 A / Electron 工作集"><span>自动压缩播放器</span><span class="dot"></span></div>
             <div class="fx-toggle" id="t-memoryAutoTrimOnBackground" onclick="toggleFx('memoryAutoTrimOnBackground')"
               title="只在最小化、隐藏或不可见后台触发自动压缩，前台播放不打断"><span>后台触发压缩</span><span class="dot"></span></div>
             <div class="fx-toggle" id="t-memoryAutoSystemTrim" onclick="toggleFx('memoryAutoSystemTrim')"
@@ -1430,7 +1428,7 @@
     <div id="login-modal" class="modal-mask">
       <div class="modal dual-login-modal">
         <div class="login-panel-head">
-          <div><b>登录接入</b><small>拖接口端口到 MR</small></div>
+          <div><b>登录接入</b><small>拖接口端口到 A</small></div>
           <button id="login-reset-all-btn" class="login-reset-all-btn" type="button"
             onclick="logoutAllAccountsAndResetEasterEgg()" title="清除所有平台登录并重新锁定彩蛋">退出登录</button>
           <button class="login-panel-close" type="button" onclick="closeLoginModal()">×</button>
@@ -1464,20 +1462,20 @@
           <svg id="login-workflow-svg" class="workflow-link-layer login-link-layer" aria-hidden="true"></svg>
           <div class="login-platform-tabs login-node-providers" id="login-platform-tabs">
             <button id="login-provider-netease" class="netease active workflow-node" type="button" data-login-provider="netease"
-              onclick="selectLoginProviderNode('netease')"><span class="provider-logo">NE</span><b>网易云</b><small>官方扫码 / Cookie</small><span class="flow-port out" data-login-provider-output="netease" title="拖到 MR 接入口"></span></button>
+              onclick="selectLoginProviderNode('netease')"><span class="provider-logo">NE</span><b>网易云</b><small>官方扫码 / Cookie</small><span class="flow-port out" data-login-provider-output="netease" title="拖到 A 接入口"></span></button>
             <button id="login-provider-qq" class="qq workflow-node" type="button" data-login-provider="qq" onclick="selectLoginProviderNode('qq')"><span
-                class="provider-logo">QQ</span><b>QQ 音乐</b><small>官方扫码 / Cookie</small><span class="flow-port out" data-login-provider-output="qq" title="拖到 MR 接入口"></span></button>
+                class="provider-logo">QQ</span><b>QQ 音乐</b><small>官方扫码 / Cookie</small><span class="flow-port out" data-login-provider-output="qq" title="拖到 A 接入口"></span></button>
             <button id="login-provider-kugou" class="kugou workflow-node" type="button" data-login-provider="kugou" onclick="selectLoginProviderNode('kugou')"><span
-                class="provider-logo">KG</span><b>酷狗音乐</b><small>官方窗口 / Cookie</small><span class="flow-port out" data-login-provider-output="kugou" title="拖到 MR 接入口"></span></button>
+                class="provider-logo">KG</span><b>酷狗音乐</b><small>官方窗口 / Cookie</small><span class="flow-port out" data-login-provider-output="kugou" title="拖到 A 接入口"></span></button>
             <button id="login-provider-qishui" class="qishui workflow-node" type="button" data-login-provider="qishui" onclick="selectLoginProviderNode('qishui')"><span
-                class="provider-logo">QS</span><b>汽水音乐</b><small>本地会话 / PC 客户端</small><span class="flow-port out" data-login-provider-output="qishui" title="拖到 MR 接入口"></span></button>
+                class="provider-logo">QS</span><b>汽水音乐</b><small>本地会话 / PC 客户端</small><span class="flow-port out" data-login-provider-output="qishui" title="拖到 A 接入口"></span></button>
             <button id="login-provider-spotify" class="spotify workflow-node" type="button" data-login-provider="spotify" onclick="selectLoginProviderNode('spotify')"><span
-                class="provider-logo">SP</span><b>Spotify</b><small>官方 OAuth</small><span class="flow-port out" data-login-provider-output="spotify" title="拖到 MR 接入口"></span></button>
+              class="provider-logo">SP</span><b>Spotify</b><small>官方 OAuth</small><span class="flow-port out" data-login-provider-output="spotify" title="拖到 A 接入口"></span></button>
           </div>
           <div class="login-node-hub workflow-node" data-login-node="mr">
-            <span class="flow-port in" data-login-mr-target="mr" title="MR 接入口"></span>
-            <span class="login-node-orb">MR</span>
-            <div class="login-node-copy"><b>MR</b><small>等待接入</small></div>
+            <span class="flow-port in" data-login-mr-target="mr" title="A 接入口"></span>
+            <span class="login-node-orb">A</span>
+            <div class="login-node-copy"><b>A</b><small>等待接入</small></div>
             <div class="login-mode-nodes">
               <button id="login-mode-official" class="login-mode-node active workflow-node" type="button" data-login-mode="official"
                 onclick="selectLoginMode('official')"><span class="provider-logo">QR</span><b>扫码</b><small>官方窗口</small></button>
@@ -1490,7 +1488,7 @@
           <div class="login-auth-copy">
             <h2 id="login-modal-title">扫码登录网易云音乐</h2>
             <div id="login-modal-desc" class="desc">使用 <b>网易云音乐 App</b> 扫码，可同步歌单、红心与播客。</div>
-            <div id="qr-status">拖动接口到 MR 接入口后开始登录。</div>
+            <div id="qr-status">拖动接口到 A 接入口后开始登录。</div>
           </div>
           <div class="login-auth-body">
             <div id="qr-shell" class="qr-shell">
@@ -1719,7 +1717,7 @@
         <div class="local-beat-tabs">
           <button id="local-beat-tab-mr" class="local-beat-tab active" type="button"
             onclick="selectLocalBeatMode('mr')">
-            <b>MR 分析</b><span>日常电影视角</span>
+            <b>A 分析</b><span>日常电影视角</span>
           </button>
           <button id="local-beat-tab-dj" class="local-beat-tab" type="button" onclick="selectLocalBeatMode('dj')">
             <b>DJ 分析</b><span>长混音/强节奏</span>
@@ -1769,7 +1767,7 @@
         <div class="update-panel-inner">
           <div class="update-panel-head">
             <div>
-              <div class="update-kicker">MINERADIO</div>
+              <div class="update-kicker">A</div>
               <div id="update-modal-title" class="update-title">New release</div>
               <div id="update-modal-version" class="update-version">v2.0.3</div>
             </div>

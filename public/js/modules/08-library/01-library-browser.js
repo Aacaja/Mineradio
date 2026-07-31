@@ -74,7 +74,7 @@
     mask.innerHTML = '<div class="modal library-browser-dialog" role="dialog" aria-modal="true" aria-labelledby="library-browser-title">' +
       '<div class="library-browser-head">' +
       '<button type="button" class="library-browser-back" data-library-browser-back aria-label="返回音乐库" hidden>‹</button>' +
-      '<div class="library-browser-heading"><div class="library-browser-kicker">MY LIBRARY · MINERADIO</div><h2 id="library-browser-title">音乐库</h2><p id="library-browser-subtitle">浏览你的 Navidrome 专辑、歌曲和歌单</p></div>' +
+      '<div class="library-browser-heading"><div class="library-browser-kicker">MY LIBRARY · A</div><h2 id="library-browser-title">音乐库</h2><p id="library-browser-subtitle">浏览你的 Navidrome 专辑、歌曲和歌单</p></div>' +
       '<button type="button" class="library-browser-close" data-library-browser-close aria-label="关闭音乐库">×</button>' +
       '</div>' +
       '<div id="library-browser-toolbar" class="library-browser-toolbar"></div>' +

@@ -361,7 +361,7 @@ function purgeSystemMemoryElevated(mask, options) {
       ok: false,
       disabled: true,
       needAdmin: false,
-      message: 'Elevated memory purge is disabled by default; Mineradio will not open administrator PowerShell windows.',
+      message: 'Elevated memory purge is disabled by default; A will not open administrator PowerShell windows.',
     });
   }
   if (!isWin) {

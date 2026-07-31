@@ -42,16 +42,16 @@ npm run build:win -- --publish never
 - FLAC 内嵌歌词及同目录 `.lrc` 能进入歌词舞台。
 - 构建产物中没有 Cookie、Token、Navidrome 凭据、本地音乐、缓存或调试日志。
 
-## 当前内部产物命名
+## 当前 A 产物命名
 
-本次只修改 Markdown 文档，尚未修改 `package.json`、electron-builder 配置和工作流中的兼容标识。因此 GitHub Actions 当前仍会生成类似下面的内部文件名：
+`package.json` 和 electron-builder 已使用 A 的产品显示名、可执行文件名、快捷方式名和安装包名。GitHub Actions 会生成类似下面的产物：
 
 ```text
-Mineradio-Windows-<branch>-<run>.zip
-Mineradio-<version>-Setup.exe
+A-Windows-<branch>-<run>.zip
+A-<version>-Setup.exe
 ```
 
-这些文件名属于构建兼容标识；文档和产品名称使用 A。若以后需要连同安装包、快捷方式、App ID、更新地址和 IPC 名称一起完成代码级改名，应单独进行一次完整的迁移并重新验证用户数据和安装器安全逻辑。
+内部 `MINERADIO_*` 环境变量、IPC 名称和历史数据目录仍保留兼容读取；首次启动 A 时会把旧 `AppData/Mineradio` 中的应用数据非破坏性迁移到 `AppData/A`。
 
 ## 发布边界
 
