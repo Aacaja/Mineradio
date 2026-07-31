@@ -109,7 +109,7 @@
 
   function browserToolbarHtml() {
     if (state.detail) {
-      return '<div class="library-browser-detail-toolbar"><span>专辑详情 · ' + escHtml(browserSourceLabel(state.detail.provider)) + '</span>' +
+      return '<div class="library-browser-detail-toolbar"><span>' + (state.detail.kind === 'playlist' ? '歌单详情 · ' : '专辑详情 · ') + escHtml(browserSourceLabel(state.detail.provider)) + '</span>' +
         '<button type="button" class="library-browser-tool-btn" data-library-browser-panel>打开左侧歌单</button></div>';
     }
     var sources = [];
@@ -211,9 +211,13 @@
         '<span class="library-detail-track-copy"><b>' + escHtml(song.name || song.title || '未知歌曲') + '</b><small>' + escHtml(song.artist || album.artist || '未知艺术家') + '</small></span>' +
         '<span class="library-detail-track-duration">' + escHtml(browserFormatDuration(song.duration)) + '</span><span class="library-detail-track-play">▶</span></button>';
     }).join('');
-    body.innerHTML = '<div class="library-album-detail-head">' + coverHtml + '<div class="library-album-detail-copy"><div class="library-browser-kicker">' + escHtml(browserSourceLabel(album.provider || detail.provider)) + ' · ALBUM</div><h3>' + escHtml(album.name || detail.title || '专辑详情') + '</h3><p>' + escHtml(album.artist || album.albumArtist || '未知艺术家') + '</p><span>' + tracks.length + ' 首' + (album.year ? ' · ' + album.year : '') + '</span><button type="button" class="library-browser-play-all" data-library-detail-play>播放全部</button></div></div>' +
+    var kindLabel = detail.kind === 'playlist' ? 'PLAYLIST' : 'ALBUM';
+    var moreButton = detail.kind === 'playlist' && detail.hasMore
+      ? '<button type="button" class="library-browser-tool-btn" data-library-detail-more>' + (detail.loadingMore ? '正在加载…' : '继续加载歌曲') + '</button>'
+      : '';
+    body.innerHTML = '<div class="library-album-detail-head">' + coverHtml + '<div class="library-album-detail-copy"><div class="library-browser-kicker">' + escHtml(browserSourceLabel(album.provider || detail.provider)) + ' · ' + kindLabel + '</div><h3>' + escHtml(album.name || detail.title || '专辑详情') + '</h3><p>' + escHtml(album.artist || album.albumArtist || '未知艺术家') + '</p><span>' + tracks.length + (detail.total ? '/' + detail.total : '') + ' 首' + (album.year ? ' · ' + album.year : '') + '</span><button type="button" class="library-browser-play-all" data-library-detail-play>播放全部</button></div></div>' +
       '<div class="library-browser-section-head library-detail-section-head"><div><b>歌曲</b><small>点击任意歌曲开始播放</small></div></div>' +
-      (rows ? '<div class="library-detail-track-list">' + rows + '</div>' : browserEmptyHtml('这个专辑没有可播放歌曲'));
+      (rows ? '<div class="library-detail-track-list">' + rows + '</div>' : browserEmptyHtml(detail.kind === 'playlist' ? '这个歌单没有可播放歌曲' : '这个专辑没有可播放歌曲')) + moreButton;
   }
 
   function renderLibraryBrowser() {
@@ -324,7 +328,18 @@
 
   async function openLibraryBrowserDetail(item, kind) {
     if (!item || !item.id) return;
-    state.detail = { provider: item.provider === 'local' ? 'local' : 'navidrome', album: kind === 'album' ? item : null, title: item.name || '', tracks: [] };
+    state.detail = {
+      kind: kind,
+      id: String(item.id),
+      provider: item.provider === 'local' ? 'local' : 'navidrome',
+      album: kind === 'album' ? item : null,
+      title: item.name || '',
+      tracks: [],
+      total: Number(item.trackCount) || 0,
+      nextOffset: 0,
+      hasMore: kind === 'playlist',
+      loadingMore: false,
+    };
     state.detailLoading = true;
     state.detailError = '';
     var token = ++state.token;
@@ -338,10 +353,16 @@
       var tracks = (data && (data.tracks || data.songs) || []).map(cloneSong);
       if (data && data.error && !tracks.length) throw new Error(data.message || data.error);
       state.detail = {
+        kind: kind,
+        id: String(item.id),
         provider: item.provider === 'local' ? 'local' : 'navidrome',
         album: kind === 'album' ? Object.assign({}, item, data && data.album || {}) : { name: item.name, artist: item.creator || item.owner, cover: item.cover, provider: item.provider },
         title: item.name || '',
         tracks: tracks,
+        total: Math.max(tracks.length, Number(data && (data.total || data.playlist && data.playlist.trackCount)) || Number(item.trackCount) || 0),
+        nextOffset: Math.max(Number(data && data.nextOffset) || tracks.length, tracks.length),
+        hasMore: kind === 'playlist' && !!(data && data.hasMore),
+        loadingMore: false,
       };
     } catch (error) {
       if (token === state.token) state.detailError = error && error.message || '内容读取失败，请重试。';
@@ -353,9 +374,49 @@
     }
   }
 
+  async function loadMoreLibraryBrowserPlaylistTracks() {
+    var detail = state.detail;
+    if (!detail || detail.kind !== 'playlist' || detail.loadingMore || !detail.hasMore) return false;
+    var offset = Math.max(0, Number(detail.nextOffset) || detail.tracks.length);
+    var token = ++state.token;
+    detail.loadingMore = true;
+    renderLibraryBrowser();
+    try {
+      var data = await apiJson('/api/library/playlist/tracks?id=' + encodeURIComponent(detail.id) + '&offset=' + offset + '&limit=500', { timeoutMs: 20000 });
+      if (token !== state.token || !state.open || state.detail !== detail) return false;
+      var incoming = (data && data.tracks || []).map(cloneSong);
+      var seen = Object.create(null);
+      detail.tracks.forEach(function (song) { if (song && song.id) seen[String(song.id)] = true; });
+      incoming.forEach(function (song) { if (song && song.id && !seen[String(song.id)]) { seen[String(song.id)] = true; detail.tracks.push(song); } });
+      detail.total = Math.max(detail.total || 0, Number(data && (data.total || data.playlist && data.playlist.trackCount)) || 0, detail.tracks.length);
+      detail.nextOffset = Math.max(offset + incoming.length, Number(data && data.nextOffset) || 0, detail.tracks.length);
+      detail.hasMore = !!(data && data.hasMore) && incoming.length > 0 && detail.nextOffset > offset;
+      return incoming.length > 0;
+    } catch (error) {
+      if (token === state.token) showToast('后续歌曲加载失败，请重试');
+      return false;
+    } finally {
+      if (token === state.token && state.detail === detail) {
+        detail.loadingMore = false;
+        renderLibraryBrowser();
+      }
+    }
+  }
+
   function playLibraryBrowserTracks(tracks, title, index) {
     tracks = (tracks || []).map(cloneSong);
     if (!tracks.length) { showToast('没有可播放的歌曲'); return; }
+    if (state.detail && state.detail.kind === 'playlist' && state.detail.id && typeof loadPlaylistIntoQueueById === 'function') {
+      Promise.resolve(loadPlaylistIntoQueueById(state.detail.id, true, title || '歌单', {
+        seedTracks: tracks,
+        startIndex: Number(index) || 0,
+        total: state.detail.total,
+        nextOffset: state.detail.nextOffset,
+        hasMore: state.detail.hasMore,
+        preserveHomeState: true,
+      })).catch(function (error) { console.warn('[LibraryBrowserPlaylistPlay]', error); showToast('歌单播放启动失败'); });
+      return;
+    }
     if (typeof loadLibraryTracksIntoQueue === 'function') {
       loadLibraryTracksIntoQueue(tracks, title || '音乐库', Number(index) || 0, true);
       return;
@@ -415,7 +476,7 @@
   }
 
   function handleLibraryBrowserClick(event) {
-    var target = event.target && event.target.closest ? event.target.closest('[data-library-browser-view],[data-library-browser-source],[data-library-browser-refresh],[data-library-browser-panel],[data-library-browser-settings],[data-library-album-index],[data-library-playlist-index],[data-library-detail-play],[data-library-detail-track]') : null;
+    var target = event.target && event.target.closest ? event.target.closest('[data-library-browser-view],[data-library-browser-source],[data-library-browser-refresh],[data-library-browser-panel],[data-library-browser-settings],[data-library-album-index],[data-library-playlist-index],[data-library-detail-more],[data-library-detail-play],[data-library-detail-track]') : null;
     if (!target) return;
     event.preventDefault();
     if (target.hasAttribute('data-library-browser-view')) { setBrowserView(target.getAttribute('data-library-browser-view')); return; }
@@ -445,6 +506,10 @@
     if (target.hasAttribute('data-library-playlist-index')) {
       var playlistItem = state.playlists[Number(target.getAttribute('data-library-playlist-index'))];
       openLibraryBrowserDetail(playlistItem, 'playlist');
+      return;
+    }
+    if (target.hasAttribute('data-library-detail-more')) {
+      loadMoreLibraryBrowserPlaylistTracks();
       return;
     }
     if (target.hasAttribute('data-library-detail-play')) {

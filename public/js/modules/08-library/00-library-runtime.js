@@ -425,20 +425,48 @@ function preparePlaylistPanelTabOnOpen(panel) { if (!playQueue.length && queueVi
 
 async function loadPlaylistIntoQueueById(id, autoplay, title, opts) {
   opts = opts || {};
+  if (!id) return false;
+  if (!opts.preserveHomeState) {
+    homeForcedOpen = false;
+    homeSuppressed = false;
+    updateEmptyHomeVisibility();
+  }
+  showLoading();
   var source = playlistQueueSource(id);
   var data = null;
-  try { data = await apiJson(playlistTracksEndpoint(source.provider, source.id, { offset: 0, limit: 500 }), { timeoutMs: 16000 }); } catch (error) { showToast('歌单载入失败'); return false; }
-  var tracks = (data && data.tracks || []).map(cloneSong);
-  if (!tracks.length) { showToast('歌单为空'); return false; }
+  var tracks = Array.isArray(opts.seedTracks) && opts.seedTracks.length ? opts.seedTracks.map(cloneSong) : [];
+  try {
+    if (!tracks.length) {
+      data = await apiJson(playlistQueuePageUrl(source, 0, playlistQueuePageSize(source.provider, true)), { timeoutMs: 16000 });
+      tracks = (data && data.tracks || []).map(cloneSong);
+    } else {
+      data = { tracks: tracks, total: opts.total, nextOffset: opts.nextOffset, hasMore: opts.hasMore };
+    }
+  } catch (error) {
+    showToast('歌单首批加载失败');
+    hideLoading();
+    return false;
+  }
+  if (!tracks.length) { showToast(data && (data.message || data.error) || '歌单为空'); hideLoading(); return false; }
+  var total = Math.max(tracks.length, Number(data && (data.total || data.playlist && data.playlist.trackCount)) || Number(opts.total) || 0);
+  var nextOffset = Math.max(Number(data && data.nextOffset) || Number(opts.nextOffset) || tracks.length, tracks.length);
+  var hasMore = opts.hasMore != null ? !!opts.hasMore : !!(data && data.hasMore);
+  if (total > nextOffset) hasMore = true;
   playQueue = tracks;
   currentIdx = Math.max(0, Math.min(tracks.length - 1, Number(opts.startIndex) || 0));
-  queueHydrationState = { token: (queueHydrationState.token || 0) + 1, active: false, loading: false, provider: source.provider, playlistId: id, sourceId: source.id, title: title || '', total: tracks.length, nextOffset: tracks.length, hasMore: false, loaded: tracks.length, error: '', promise: null, timer: 0, queueRef: playQueue, warmPagesRemaining: 0, pausedForBuffer: false };
+  queueHydrationState = { token: (queueHydrationState.token || 0) + 1, active: hasMore, loading: false, provider: source.provider, playlistId: source.requestId, sourceId: source.id, title: title || data && data.playlist && data.playlist.name || '', total: total, nextOffset: nextOffset, hasMore: hasMore, loaded: tracks.length, error: '', promise: null, timer: 0, queueRef: playQueue, warmPagesRemaining: hasMore ? 1 : 0, pausedForBuffer: false };
   safeRenderQueuePanel('library-playlist-load', { animate: true, scrollCurrent: true, deferWhenHidden: false });
   if (typeof safeSwitchPlaylistTab === 'function') safeSwitchPlaylistTab('queue', 'library-playlist-load'); else switchPlaylistTab('queue', { save: false });
   if (typeof safeShelfRebuild === 'function') safeShelfRebuild('library-playlist-load', true);
-  if (autoplay) await playQueueAt(currentIdx, { preserveHomeState: !!opts.preserveHomeState });
-  showToast('载入: ' + (title || '歌单'));
-  return true;
+  forcePlaybackControlsInteractive();
+  try {
+    if (autoplay) await playQueueAt(currentIdx, { preserveHomeState: !!opts.preserveHomeState });
+    showToast(hasMore ? '已开始播放，后续歌曲会按需加入队列' : '载入: ' + (title || '歌单'));
+    if (hasMore && typeof schedulePlaylistQueueHydration === 'function') schedulePlaylistQueueHydration(180, 'library-playlist-initial');
+    return true;
+  } finally {
+    hideLoading();
+  }
 }
 
 async function loadHomeDiscover(force) {
