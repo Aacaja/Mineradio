@@ -1,7 +1,12 @@
-# Mineradio 作者支持渠道
+# A 反馈与支持
 
-如果 Mineradio 陪你多听了一首歌，也欢迎通过下面的二维码支持作者继续维护。
+A 当前是个人魔改开发版，主要用于连接个人 Navidrome 服务器和管理本地音乐库。
 
-![Mineradio 作者支持渠道](./assets/support/mineradio-author-support-poster.png)
+如果遇到问题，反馈时请尽量附上：
 
-扫码前请确认收款人信息。二维码来自作者提供的支付宝与微信赞赏原图裁切。
+- A 的构建来源（GitHub Actions 运行编号或 Release 地址）。
+- Windows 版本、Navidrome 版本和复现步骤。
+- 相关页面、歌曲来源（Navidrome 或本地）以及是否能正常读取封面/歌词。
+- 不包含账号、密码、Token、Cookie、私密服务器地址和本地完整路径的错误信息或截图。
+
+请不要上传音乐文件、完整日志或包含个人凭据的配置文件。

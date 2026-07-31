@@ -1,4 +1,6 @@
-# Mineradio SVG Glass Texture
+# A SVG Glass Texture
+
+本文记录 A 当前播放器玻璃质感的实现基线。文中的 `mineradio-*` filter、DOM、窗口和性能字段是源码兼容标识，必须与代码保持一致，不属于对外产品名称。
 
 这是用户明确要求保存的播放器 SVG 玻璃质感基线。后续可以修补偏移、缺角、套用范围和响应式问题，但不要随意重写核心质感。
 

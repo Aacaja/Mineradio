@@ -1,130 +1,107 @@
-# Mineradio
+# A
 
-![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
+![A 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
 
-Mineradio 是一款 Windows 桌面沉浸式音乐播放器，把 Navidrome / 本地媒体库、歌词舞台、粒子视觉、3D 歌单架和完整桌面模式组合成一个更接近现场感的私人音乐空间。
+A 是当前仓库维护者在原开源 Electron 音乐播放器基础上的个人魔改开发版。它把个人 Navidrome 音乐服务器、本地音乐库、歌词舞台、粒子视觉和 3D 歌单架组合在一起，重点服务于“管理自己的音乐并直接播放”的使用场景。
 
-## 立即下载 Windows 安装包
-
-> 安装包可从夸克盘、百度云、蓝奏云或 GitHub Release 手动下载；软件内更新入口仍只打开网盘线路，不读取 Release 附件。
-
-| 下载入口 | 推荐人群 | 链接 |
-| --- | --- | --- |
-| 夸克盘 | 夸克用户 | [下载 Mineradio 2.0.3](https://pan.quark.cn/s/f40289e1c5d3) |
-| 百度云 | 百度网盘用户（提取码 `sjhp`） | [下载 Mineradio 2.0.3](https://pan.baidu.com/s/14fgTABgbfseOg9QuX0Um7Q?pwd=sjhp) |
-| 蓝奏云 | 直接下载 | [下载 Mineradio 2.0.3](https://xxhuber.lanzout.com/mineradio2) |
-| GitHub Release | GitHub 用户、版本说明与源码 | [下载 Mineradio 2.0.3](https://github.com/XxHuberrr/Mineradio/releases/tag/v2.0.3) |
-
-安装时只需要下载并运行 `Mineradio-2.0.3-Setup.exe`。不要把 `.blockmap`、`latest.yml` 或 `win-unpacked` 当成正式安装包。
-
-## 下载或安装被拦截怎么办
-
-小众 Electron 桌面软件、未签名安装包有时会被浏览器、Windows Defender 或 SmartScreen 提示风险。请先确认安装包来自上面的网盘入口或官方 GitHub Release，文件名是 `Mineradio-2.0.3-Setup.exe`。
-
-1. 浏览器下载栏提示风险时，打开下载列表，点这条下载右侧的 `...` 三个点，选择 `保留` / `仍要保留` / `显示更多` 后继续保留。
-2. Windows SmartScreen 弹出蓝色拦截窗口时，点 `更多信息`，再点 `仍要运行`。
-3. 如果杀毒软件明确显示木马、高危或已经隔离，不要强行运行；删除该文件后重新从上面的网盘入口下载，仍然异常请带截图反馈给作者。
-
-## 作者支持
-
-如果 Mineradio 陪你多听了一首歌，也欢迎请作者一杯咖啡。
-
-[查看完整支持页](./docs/SUPPORT.md)
-
-![Mineradio 作者支持渠道](./docs/assets/support/mineradio-author-support-poster.png)
-
-Mineradio 2.0 重新整理了视觉层次、桌面模式、主页与搜索体验，并收紧了连续播放、启动和后台性能表现。
+> 当前文档中的产品名称统一为 **A**。本次只同步 Markdown 文档，源码和构建配置中仍保留部分原有兼容标识（例如 `MINERADIO_*` 环境变量、API 路径、Electron IPC 名称和 Windows 产物文件名），这些标识暂时不能直接改名。
 
 ## 当前版本
 
-当前版本：`2.0.3`
+- 产品名称：`A`
+- 版本状态：个人开发版，持续在当前仓库迭代
+- 当前基线：`package.json` 中仍为 `2.0.3`；这只是构建基线，不代表新的正式 Release
+- 目标平台：Windows 桌面端
+- 开发环境：macOS
+- Windows 安装包：通过 GitHub Actions 的 `Windows Build` 工作流编译
 
-状态：Mineradio 2.0.3 正式版。
+当前版本已经完成并验证的主要能力如下：
 
-> 安全提示：`v1.0.10` 及更早旧安装包不再建议继续安装或传播。请使用本页提供的 `Mineradio-2.0.3-Setup.exe`。
+- 通过 Subsonic/OpenSubsonic 接口连接个人 Navidrome 服务器并读取服务器内容
+- 浏览 Navidrome 的全部专辑和歌单，进入详情后播放单曲或整张专辑/歌单
+- 首页提供稳定的“音乐库”入口；完整歌单浏览不依赖鼠标悬停左侧歌单栏
+- Navidrome 播放通过本地服务代理，避免远程音频地址、鉴权和浏览器播放限制互相影响
+- 专辑封面、歌单封面和歌曲封面读取失败时提供占位显示，不阻塞列表浏览
+- 大歌单按页读取和继续加载，不把歌单硬截断到固定数量
+- 选择本地音乐文件夹，递归扫描 MP3、FLAC、M4A、AAC、OGG、OPUS、WAV 等常见格式
+- 读取本地音乐标签、内嵌封面、FLAC 内嵌歌词和同目录 `.lrc` 歌词
+- 根据本地文件夹、目录和专辑自动生成可浏览的本地歌单
+- 保留首页每日推荐、最近播放、继续听和原有播放队列体验
+- 保留歌词舞台、粒子视觉、电影镜头、桌面歌词、全屏桌面模式和 3D 歌单架
+- 保留自定义封面、歌词布局、视觉参数和用户存档等原有能力
 
-## 核心特性
+## A 个人魔改内容
 
-- 首页包含每日推荐、平台推荐、继续听、听歌画像和我的歌单入口
-- 完整桌面模式保留播放器、主页、歌单和桌面交互
-- 支持本地 MP4 与 Wallpaper Engine 视觉内容
-- 播放后切换到 Emily / 默认播放态视觉，歌词舞台与粒子舞台同步工作
-- 基于节奏的电影镜头视觉系统
-- 歌词舞台、自定义歌词、歌词位置与视觉控制
-- 自定义专辑封面上传与裁剪
-- 右键唤起 3D 歌单架，支持歌单队列浏览
-- Navidrome（Subsonic/OpenSubsonic）搜索、歌单、收藏、歌词和播放
-- Navidrome 多账号切换；密码由 Electron `safeStorage` 加密保存
-- 本地单曲/文件夹导入；桌面版可递归扫描标签、封面、LRC 并自动生成歌单
-- GitHub Releases 更新检测与下载入口
-- 首次启动内置「默认测试」视觉用户存档，软件内默认视觉参数与该存档一致
+本版本相较原始流媒体取向，主要进行了以下方向的改造：
 
-## 使用说明
+1. 将主要音乐来源收敛为“个人 Navidrome + 本地音乐库”，默认不再要求网易云音乐、QQ 音乐等平台账号。
+2. 新增独立的音乐库浏览界面：专辑和歌单分栏展示，支持 Navidrome/本地音乐切换、专辑排序、封面、详情和播放全部。
+3. 修复 Navidrome 能读取歌单但无法播放的问题，统一远程歌曲的播放地址、鉴权代理和错误处理。
+4. 修复 Navidrome 歌单、专辑和歌曲封面读取链路，增加封面代理及无封面占位。
+5. 修复本地 FLAC 内嵌歌词没有进入歌词舞台的问题，同时保留同目录 `.lrc` 作为补充来源。
+6. 为长歌单加入分页、继续加载和播放队列补页，避免只显示前几百首或一次性渲染全部歌曲。
+7. 保留原有每日推荐和沉浸式视觉功能，让本地库/远程库浏览与原首页体验共存。
 
-Windows 用户可以从本页列出的夸克盘、百度云、蓝奏云或 GitHub Release 下载安装包。
+## 使用方式
 
-首次打开后点击右上角“音乐库设置”：填写 Navidrome 的 HTTPS 地址、用户名和密码，测试连接后保存即可。地址填写站点根地址即可，例如 `https://music.example.com`，不需要手动追加 `/rest`。也可以只选择本地音乐文件夹；应用会递归扫描 MP3、FLAC、M4A、OGG、WAV 等格式，并按目录和专辑生成只读歌单。密码不会写入前端或普通配置文件。
+### 连接 Navidrome
 
-正式分发以 `Mineradio-2.0.3-Setup.exe` 为准，不建议直接使用 `win-unpacked` 目录。安装包会创建桌面快捷方式。
+1. 打开右上角的“音乐库设置”。
+2. 填写 Navidrome 站点根地址、用户名和密码，例如 `https://music.example.com`。地址不需要手动追加 `/rest`。
+3. 点击“测试连接”，成功后点击“保存并切换”。可以保存多个 Navidrome 账号并随时切换。
+4. 回到首页，打开“音乐库”入口。
+5. 在“专辑”页浏览服务器中的专辑；切换到“歌单”页查看完整歌单。点击封面进入详情，点击歌曲或“播放全部”即可加入播放器并开始播放。
 
-已经安装过旧版本的用户可直接运行 `Mineradio-2.0.3-Setup.exe` 完成更新。软件内更新入口只会打开浏览器下载页，不会在客户端内下载或应用补丁。
+左侧“我的歌单”仍然保留，适合快速查看当前队列和快捷播放；需要浏览 Navidrome 全部专辑与歌单时，以首页“音乐库”入口为准。
 
-## 开发运行
+### 导入本地音乐
+
+1. 在“音乐库设置”中找到“本地音乐文件夹”。
+2. 点击“选择文件夹”，选择一个或多个音乐目录。
+3. 等待扫描完成；以后新增文件可以点击“重新扫描”。
+4. 回到“音乐库”，切换到“本地音乐”即可浏览本地专辑和自动歌单。
+
+本地扫描会读取音频标签、专辑封面和歌词。FLAC 的歌词优先读取文件内的歌词元数据；如果没有内嵌歌词，会继续尝试读取同目录同名的 `.lrc` 文件。歌词格式应尽量使用标准 LRC 时间戳。
+
+### 每日推荐
+
+每日推荐仍然保留在首页，不会因为连接 Navidrome 或导入本地音乐而消失。推荐内容、最近播放和继续听会根据当前可用的个人音乐库更新；没有连接远程服务器时也可以使用本地音乐库。
+
+## 本地开发
 
 ```bash
-npm install
+npm ci
 npm start
-npm run build:win
 ```
 
-桌面版入口由 Electron 主进程加载本地服务。`npm run build:win` 会生成 Windows NSIS 安装包，产物位于 `dist/`。
-
-### 在 GitHub 上编译 Windows 安装包
-
-仓库内置了 `.github/workflows/windows-build.yml`。它不会在每次普通提交时自动运行，只会在 Actions 页面手动运行，或推送 `v*` 标签时运行。
-
-手动编译：打开仓库的 `Actions` → `Windows Build` → `Run workflow`，选择包含最新代码的分支并确认。任务完成后打开该次运行，在 `Artifacts` 下载 `Mineradio-Windows-...`，解压后运行其中的 `Mineradio-*-Setup.exe`。Artifact 默认保留 14 天。
-
-正式发布时，先把 `package.json` 和 `package-lock.json` 的版本号更新为目标版本，再提交并推送版本标签来触发构建。例如当前版本要发布为 `2.0.4` 时：
+可以用下面的回归测试检查本地媒体、Navidrome 播放地址、封面和歌词相关链路：
 
 ```bash
-npm version 2.0.4 --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore: release 2.0.4"
-git tag v2.0.4
-git push origin v2.0.4
+node tests/library-media-regressions.test.js
 ```
 
-工作流只上传构建产物，不会自动创建 GitHub Release，也不会上传 Navidrome 地址、账号、密码或本地音乐文件。
+## 通过 GitHub Actions 编译 Windows
 
-## 更新机制
+当前开发机是 macOS，不能在本机直接生成 Windows NSIS 安装包。请把代码推送到 GitHub 后手动编译：
 
-Mineradio 会请求 GitHub Releases latest 检测新版本。远端版本高于本地版本时，应用内更新入口会展示 Release 内容，并通过系统浏览器打开可选网盘线路；即使 Release 附带完整安装包，`2.0.3+` 客户端也不会读取、下载、缓存或应用该附件与补丁。
+1. 打开仓库的 `Actions` 页面。
+2. 选择 `Windows Build`。
+3. 点击 `Run workflow`，选择包含最新代码的分支并运行。
+4. 构建完成后，在对应运行记录的 `Artifacts` 中下载 Windows 构建产物。
+5. 解压后运行其中的 `*-Setup.exe`。
 
-本地验证更新链路时，可以通过 `MINERADIO_UPDATE_MANIFEST` 指向一个本地 manifest JSON 或 HTTP 地址来模拟线上 Release。
+工作流会在 Windows runner 上执行依赖安装、媒体回归测试和 `npm run build:win`。当前 Artifact 和安装包仍沿用源码中的内部文件名 `Mineradio-Windows-*`、`Mineradio-*-Setup.exe`；这不影响文档和产品名称使用 A。工作流只上传构建产物，不会上传 Navidrome 地址、账号密码或本地音乐文件。
 
-## 历史平台兼容代码说明
+## 使用限制与隐私
 
-当前发行版默认使用个人 Navidrome / 本地媒体库，不要求网易云音乐、QQ 音乐等账号，也不会在界面展示这些登录入口或播客入口。
+- Navidrome 地址必须能从 Windows 运行环境访问；服务器本身也需要允许当前账号播放对应歌曲。
+- 本地音乐只在本机扫描和播放，不会自动上传到 GitHub 或其他服务器。
+- Navidrome 配置保存在本机用户数据目录，密码等敏感凭据由 Electron `safeStorage` 加密保存。
+- 本地音乐索引、封面缓存、歌词和播放记录属于用户数据，不要提交到 Git 仓库。
+- A 不是 Navidrome 或其他音乐平台的官方客户端。请自行遵守音乐服务器、音乐文件和第三方服务的授权与使用规则。
 
-仓库中保留的旧平台后端仅用于迁移兼容；只有显式设置 `MINERADIO_LIBRARY_ONLY=0` 时才会重新开放旧路由。项目不会提供绕过付费、绕过会员、破解音质或重新分发音乐内容的能力。
+更多说明见 [PRIVACY.md](./PRIVACY.md)、[NOTICE.md](./NOTICE.md) 和 [SECURITY.md](./SECURITY.md)。
 
-## 用户数据与隐私
+## 许可证
 
-Navidrome 账号配置、加密凭据、本地媒体库索引、登录 Cookie、搜索历史、自定义封面、自定义歌词、节奏分析缓存等数据只应保存在本机用户数据目录或浏览器本地存储中，不应提交到仓库。播放请求由本地服务代理到你配置的 HTTPS Navidrome 地址。
-
-更多说明见 [PRIVACY.md](./PRIVACY.md)。
-
-## 致谢
-
-Mineradio 由 XxHuberrr 主要设计与打造。emily 作为早期视觉底层想法与 `emily` 视觉预设改进方向的共创者和灵感来源之一，特此感谢。
-
-同时感谢小天才e宝、应春日、锋将军、軌跡、林中、骊、风痕、花椰菜🥦在早期体验、测试反馈和发布准备中的帮助。
-
-## 版权与授权
-
-Copyright (C) 2026 XxHuberrr.
-
-本项目采用 GPL-3.0 授权。详见 [LICENSE](./LICENSE)。
-
-MR Logo、Mineradio 名称、界面视觉设计与原创视觉表达归作者所有；第三方依赖和第三方服务分别遵循其各自授权与服务条款。
+本项目采用 GPL-3.0-only，详见 [LICENSE](./LICENSE)。原项目代码、第三方依赖和第三方服务分别遵循其各自的许可证及服务条款。

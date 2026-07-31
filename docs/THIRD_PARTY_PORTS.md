@@ -1,4 +1,6 @@
-# Third-party ports
+# A 第三方移植说明
+
+本文记录 A 个人魔改版中保留或适配的第三方思路。A 的 Navidrome、本地音乐库、播放代理、歌单分页和歌词读取实现是当前仓库自己的实现；本文件不表示相关上游项目为 A 的官方合作方。
 
 ## Mineradio-LX-Music desktop/home reference
 
@@ -8,7 +10,7 @@
 - License: GNU GPL v3 (`GPL-3.0-only`)
 - Port dates: 2026-07-18 (initial), 2026-07-19 (homepage refresh)
 
-Mineradio's full desktop mode adapts the upstream idea of moving the existing
+A's full desktop mode adapts the upstream idea of moving the existing
 Electron main-window HWND between the Windows WorkerW desktop layer and an
 interactive top-level window. The native attach/detach code in this project was
 rewritten around the optimized edition's fail-closed WorkerW discovery, DPI
@@ -25,7 +27,7 @@ overlay were not copied.
 The 2026-07-19 refresh additionally adapts the three-song "For You" strip,
 stable cover-image swaps, in-place quick-card updates, daily-review hover
 feedback, and compact-height scrolling/settings behavior. These features remain
-implemented against Mineradio's existing provider, weather-radio, local-library,
+implemented against A's existing provider, weather-radio, local-library,
 queue, and playback modules rather than the upstream LX/local-only data model.
 
 The combined application remains distributed under the repository's GNU GPL v3

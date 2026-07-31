@@ -1,29 +1,26 @@
-# Security Policy
+# A 安全策略
 
-## Supported Versions
+## 支持范围
 
-当前只维护最新公开版本。
+当前只维护仓库最新的 A 个人开发版和由 GitHub Actions 生成的最新 Windows 构建产物。旧的安装包、旧的打包目录和来源不明的二进制文件不属于当前支持范围。
 
-## Installer Safety Notice
+## 安装包与构建安全
 
-`v1.0.10` 及更早旧安装包不再建议继续安装或传播。请将旧 `.exe` 安装包视为不可信历史产物并隔离保留；需要安装 Mineradio 时，请使用 `v1.1.0` 或更新版本的 GitHub Release 安装包。
+- Windows 安装包应优先从当前仓库的 GitHub Actions Artifact 或明确对应的 GitHub Release 获取。
+- 下载后应核对文件来源、文件名和发布记录；不要把 `.blockmap`、`latest.yml` 或 `win-unpacked` 目录当作安装包本体。
+- 未签名的个人开发版可能触发 Windows Defender 或 SmartScreen 提示。来源无法确认、被杀毒软件明确判定为高危或已经被隔离的文件不要强行运行。
+- 构建前后都不要把 Navidrome 凭据、本地音乐、Cookie、Token、日志或缓存放入仓库和构建 Artifact。
 
-`v1.1.0` 不作为 `v1.0.10` 的软件内本地更新包发布。旧版本用户请手动下载新版安装包，卸载旧版本后进行纯净安装。
+## 报告安全问题
 
-## Reporting a Vulnerability
+如果发现安全问题，请通过 GitHub Issues 或仓库维护者提供的私下联系方式报告。公开反馈前请先移除敏感信息。
 
-如果你发现安全问题，请通过 GitHub Issues 或仓库作者主页联系作者。
+请不要在公开 Issue 中直接贴出：
 
-请不要在公开 Issue 中直接贴出 Cookie、Token、账号信息、私密链接或可复现的敏感数据。
+- Navidrome 地址、用户名、密码、Token 或 API Key。
+- Cookie、二维码登录状态或私密播放链接。
+- 本地音乐路径、账号截图和包含隐私内容的调试日志。
 
-## Sensitive Data
+## 凭据处理
 
-Mineradio 不应收集或上传用户 Cookie。用户登录状态应保存在本地用户数据目录中。
-
-如果你要提交问题反馈，请先确认没有附带：
-
-- `.cookie`
-- `.qq-cookie`
-- 本地音乐文件
-- 用户账号截图
-- 调试日志中的 Cookie、Token 或隐私路径
+A 不应主动收集或上传用户凭据。Navidrome 密码、Token 和 API Key 由 Electron `safeStorage` 加密后保存在本机用户数据目录；如果系统没有可用的安全存储，应用应拒绝保存敏感凭据。

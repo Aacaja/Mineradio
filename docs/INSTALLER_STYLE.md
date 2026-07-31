@@ -1,9 +1,13 @@
-# 2026-06-25 P0 Installer Safety Notes
+# A Windows 安装器维护说明
+
+> 本文已按当前产品名称 A 整理。安装目录、NSIS 函数、环境变量、IPC 名称和历史安装包中的 `Mineradio` 字样属于源码兼容标识，涉及安装器迁移时必须按实际代码保留，不能只做文字替换。
+
+## 2026-06-25 P0 Installer Safety Notes
 
 - Full setup adoption rule: the installer may adopt an existing registered install only when the registered path itself is a dedicated `...\Mineradio` directory and contains Mineradio files or `.mineradio-install-root`; mixed parent folders and drive roots must stay blocked/quarantined.
 - Quick patch rule: installer/uninstaller safety bugs cannot be fixed by a quick patch JSON alone, because the Windows uninstaller and install registry must be replaced by the full NSIS setup.
 
-# 2026-06-26 Fixed Installer Packaging Baseline
+## 2026-06-26 Fixed Installer Packaging Baseline
 
 - Future Windows releases must keep the repaired `v1.1.1` installer shape: custom NSIS pages and safety logic from `build/installer.nsh`, full setup `.exe`, `.blockmap`, `latest.yml`, and `SHA256SUMS`.
 - Baseline release asset: `Mineradio-1.1.1-Setup.exe`, SHA256 `1d35750c5b9c5099bd608baa4cc8564d5a08a183dccb2aa7ab85ef613fd536f7`, size `115090051` bytes.
@@ -11,7 +15,7 @@
 - Never remove `customRemoveFiles` or restore electron-builder's default recursive `$INSTDIR` deletion path. Keep deletion limited to known Mineradio/Electron top-level files and non-recursive empty-directory cleanup.
 - Keep safe overwrite behavior: existing dedicated `...\Mineradio` folders containing Mineradio files can be overwritten; mixed folders, parent folders, drive roots, and user data folders must stay blocked or quarantined.
 
-# Mineradio Installer Style
+## A 安装器样式
 
 2026-06-22 用户确认保留当前安装包格式。以后发布安装包，默认沿用这套样式和流程，除非用户明确要求重做。
 
