@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run library media regression tests
+        run: node tests/library-media-regressions.test.js
+
       - name: Build Windows installer
         run: npm run build:win -- --publish never
         env:

@@ -584,7 +584,17 @@ async function resolveAlbumGaplessPlaybackData(song) {
       '&uri=' + encodeURIComponent(song.spotifyUri || song.uri || '') +
       qualityParam, { timeoutMs: 9000 });
   }
+  if (playbackProvider === 'navidrome') {
+    return apiJson('/api/library/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 14000 });
+  }
   return apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
+}
+
+function playbackAudioUrlForResolvedData(data, provider) {
+  var source = String(data && data.url || '').trim();
+  if (!source) return '';
+  if (provider === 'navidrome' && /^\/api\/library\/stream(?:[?#]|$)/i.test(source)) return source;
+  return '/api/audio?url=' + encodeURIComponent(source);
 }
 
 function consumeAlbumGaplessPreload(preload) {
@@ -763,7 +773,7 @@ async function scheduleAlbumGaplessPreloadForCurrent(token, reason) {
       || !albumGaplessQueueCanAdvance(currentIdx)
     ) return false;
     if (!data || !data.url) return false;
-    var proxyAudioUrl = '/api/audio?url=' + encodeURIComponent(data.url);
+    var proxyAudioUrl = playbackAudioUrlForResolvedData(data, songProviderKey(song));
     var media = new Audio();
     media.crossOrigin = 'anonymous';
     media.preload = 'auto';
@@ -1112,6 +1122,8 @@ async function playQueueAt(idx, opts) {
           '&spotifyId=' + encodeURIComponent(song.spotifyId || '') +
           '&uri=' + encodeURIComponent(song.spotifyUri || song.uri || '') +
           qualityParam, { timeoutMs: 9000 });
+      } else if (playbackProvider === 'navidrome') {
+        data = await apiJson('/api/library/song/url?id=' + encodeURIComponent(song.id || song.providerSongId || '') + qualityParam, { timeoutMs: 14000 });
       } else {
         data = await apiJson('/api/song/url?id=' + encodeURIComponent(song.id || '') + neteasePlaybackMatchQuery(song) + qualityParam, { timeoutMs: 14000 });
       }
@@ -1179,7 +1191,7 @@ async function playQueueAt(idx, opts) {
         document.getElementById('trial-banner').classList.add('show');
       }
       markPlayPhase('audio-element');
-      var proxyAudioUrl = opts.preloadedProxyAudioUrl || '/api/audio?url=' + encodeURIComponent(data.url);
+      var proxyAudioUrl = opts.preloadedProxyAudioUrl || playbackAudioUrlForResolvedData(data, playbackProvider);
       if (albumGaplessHandoff) {
         audioFadeSerial++;
         clearAudioFadeTimers();

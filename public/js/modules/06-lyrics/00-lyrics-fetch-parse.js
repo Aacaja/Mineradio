@@ -273,11 +273,13 @@ function withLyricFallbackForSong(song, lines) {
 function parseLyricResponseToOriginalState(song, response) {
   response = response || {};
   var nativeLines = parseYrcText(response.yrc || '');
-  var lrcLines = parseLyricText(response.lyric || '');
+  var rawLyricText = String(response.lyric || '').trim();
+  var lrcLines = parseLyricText(rawLyricText);
+  if (!lrcLines.length) lrcLines = parsePlainLyricText(rawLyricText);
   var translationPayload = buildLyricTranslationPayload(response);
   var translationLines = translationPayload.lines;
   var hasNativeKaraoke = nativeLines.some(function (line) { return line.words && line.words.length; });
-  var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
+  var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? (lrcLines[0].source === 'plain' ? 'plain-line' : 'lrc-line') : 'fallback'));
   var primaryLines = nativeLines.length ? nativeLines : lrcLines;
   var lines = withLyricFallbackForSong(song, attachLyricTranslations(primaryLines, translationLines));
   if (lines.length && lines[0].fallback) timingSource = 'fallback';
@@ -423,6 +425,17 @@ function parseLyricText(text) {
     times.forEach(function (t) { lines.push({ t: t, text: txt, source: 'lrc' }); });
   });
   return finalizeLyricLineDurations(lines);
+}
+function parsePlainLyricText(text) {
+  text = String(text || '').replace(/\r\n?/g, '\n').trim();
+  if (!text || isNoLyricText(text)) return [];
+  var lines = text.split('\n').map(function (line) { return line.trim(); }).filter(function (line) {
+    return line && !/^\[(?:ar|ti|al|by|offset|re|ve|length):/i.test(line);
+  });
+  if (!lines.length) return [];
+  return finalizeLyricLineDurations(lines.map(function (line, index) {
+    return { t: index * 4.8, text: line, source: 'plain' };
+  }));
 }
 function normalizeLyricTranslationText(text) {
   text = normalizeStageLyricText(text);

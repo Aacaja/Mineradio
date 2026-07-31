@@ -364,6 +364,7 @@ async function fetchBeatPrefetchAudioUrl(song) {
   if (typeof resolveAlbumGaplessPlaybackData === 'function') {
     var resolved = await resolveAlbumGaplessPlaybackData(song);
     if (!resolved || !resolved.url || resolved.trial) return null;
+    if (typeof playbackAudioUrlForResolvedData === 'function') return playbackAudioUrlForResolvedData(resolved, songProviderKey(song));
     return '/api/audio?url=' + encodeURIComponent(resolved.url);
   }
   var isQQ = songProviderKey(song) === 'qq';

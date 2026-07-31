@@ -9,16 +9,60 @@ const crypto = require('crypto');
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.mp4', '.aac', '.ogg', '.oga', '.opus', '.wav', '.webm']);
 const COVER_NAMES = ['cover.jpg', 'cover.jpeg', 'cover.png', 'folder.jpg', 'folder.jpeg', 'folder.png', 'front.jpg', 'front.jpeg', 'front.png'];
+const LOCAL_LIBRARY_METADATA_VERSION = 2;
 
 function text(value, fallback) {
   const out = String(value == null ? '' : value).trim();
   return out || (fallback == null ? '' : String(fallback));
 }
 
+const EMBEDDED_LYRIC_TAG_RE = /^(?:LYRICS|UNSYNCEDLYRICS|SYNCEDLYRICS|LYRICS3|USLT|SYLT)(?::.*)?$/i;
+
+function lyricTimestamp(value) {
+  const milliseconds = Math.max(0, Math.round(number(value)));
+  const minutes = Math.floor(milliseconds / 60000);
+  const seconds = Math.floor(milliseconds / 1000) % 60;
+  const fraction = milliseconds % 1000;
+  return '[' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0') + '.' + String(fraction).padStart(3, '0') + ']';
+}
+
 function lyricText(value) {
   if (Array.isArray(value)) return value.map(item => lyricText(item)).filter(Boolean).join('\n');
-  if (value && typeof value === 'object') return text(value.value || value.lyrics || value.text);
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value.syncText) && value.syncText.length) {
+      const synced = value.syncText.map(item => {
+        const line = text(item && item.text);
+        return line ? lyricTimestamp(item && item.timestamp) + line : '';
+      }).filter(Boolean).join('\n');
+      if (synced) return synced;
+    }
+    return text(value.text || value.value || value.lyrics);
+  }
   return text(value);
+}
+
+function embeddedLyrics(metadata) {
+  metadata = metadata || {};
+  const native = metadata.native || {};
+  const entries = [];
+  Object.keys(native).forEach(format => {
+    const tags = Array.isArray(native[format]) ? native[format] : [native[format]];
+    tags.forEach(tag => {
+      const id = text(tag && tag.id).toUpperCase();
+      if (EMBEDDED_LYRIC_TAG_RE.test(id)) entries.push({ id, value: tag.value });
+    });
+  });
+
+  const priorities = ['SYNCEDLYRICS', 'LYRICS', 'UNSYNCEDLYRICS', 'LYRICS3', 'SYLT', 'USLT'];
+  for (const priority of priorities) {
+    const value = entries
+      .filter(entry => entry.id === priority || entry.id.startsWith(priority + ':'))
+      .map(entry => lyricText(entry.value))
+      .filter(Boolean)
+      .join('\n');
+    if (value) return value;
+  }
+  return lyricText(metadata.common && metadata.common.lyrics);
 }
 
 function number(value, fallback) {
@@ -139,6 +183,9 @@ class LocalLibrary {
 
   async init() {
     await this.load();
+    if (this.parseFileImpl && this.roots.length && this.tracks.some(item => number(item.metadataVersion) !== LOCAL_LIBRARY_METADATA_VERSION)) {
+      await this.scan({ force: false });
+    }
     this.refreshWatchers();
     return this;
   }
@@ -276,6 +323,7 @@ class LocalLibrary {
   findCached(filePath, stat, oldByPath) {
     const previous = oldByPath.get(pathKey(filePath));
     if (!previous) return null;
+    if (this.parseFileImpl && number(previous.metadataVersion) !== LOCAL_LIBRARY_METADATA_VERSION) return null;
     if (number(previous.size) !== number(stat.size) || Math.round(number(previous.mtimeMs)) !== Math.round(number(stat.mtimeMs))) return null;
     return Object.assign({}, previous, { filePath });
   }
@@ -283,11 +331,12 @@ class LocalLibrary {
   async parseTrack(filePath, stat) {
     const ext = path.extname(filePath).toLowerCase();
     const fileName = path.basename(filePath);
+    let metadata = null;
     let common = {};
     let format = {};
     try {
       if (this.parseFileImpl) {
-        const metadata = await this.parseFileImpl(filePath, { skipCovers: false, duration: true });
+        metadata = await this.parseFileImpl(filePath, { skipCovers: false, duration: true });
         common = metadata && metadata.common || {};
         format = metadata && metadata.format || {};
       }
@@ -321,11 +370,12 @@ class LocalLibrary {
       contentType: text(format.codec),
       size: number(stat.size),
       mtimeMs: number(stat.mtimeMs),
+      metadataVersion: LOCAL_LIBRARY_METADATA_VERSION,
       addedAt: Date.now(),
       filePath,
       coverFile: '',
       lyricFile: '',
-      lyrics: lyricText(common.lyrics),
+      lyrics: embeddedLyrics(metadata),
     };
     const sidecarLrc = filePath.replace(new RegExp('\\' + ext + '$', 'i'), '.lrc');
     try {
