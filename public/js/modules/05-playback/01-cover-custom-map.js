@@ -29,10 +29,19 @@ function isProxyableCoverUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
 }
 function coverProxySrc(url, cacheBust) {
-  if (!url) return '';
-  if (isInlineCoverSrc(url)) return url;
-  if (!isProxyableCoverUrl(url)) return '';
-  return '/api/cover?url=' + encodeURIComponent(url) + (cacheBust ? '&v=' + Date.now() : '');
+  var value = String(url || '').trim();
+  if (!value) return '';
+  if (isInlineCoverSrc(value)) return value;
+  if (isProxyableCoverUrl(value)) {
+    return '/api/cover?url=' + encodeURIComponent(value) + (cacheBust ? '&v=' + Date.now() : '');
+  }
+  // The library gateway serves Navidrome and local covers from the same
+  // origin.  Keep those paths loadable instead of treating them like an
+  // unsupported external URL.
+  if (/^(?:\/(?!\/)|\.\.?\/)/.test(value)) {
+    return value + (cacheBust ? (value.indexOf('?') >= 0 ? '&' : '?') + 'v=' + Date.now() : '');
+  }
+  return '';
 }
 function coverUrlWithSize(url, size) {
   if (!url || isInlineCoverSrc(url) || !/^https?:\/\//i.test(url)) return url || '';

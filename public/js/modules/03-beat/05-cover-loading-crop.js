@@ -13,7 +13,9 @@ function hideAIDepthChip() {
 function loadCoverFromUrl(directUrl, opts) {
   opts = opts || {};
   var preserveOnSwitch = !!(opts.trackSwitch || opts.seamlessCover || opts.seamlessTrackSwitch);
-  if (!directUrl || typeof directUrl !== 'string' || !/^https?:\/\//i.test(directUrl)) {
+  directUrl = String(directUrl || '').trim();
+  var proxiedUrl = coverProxySrc(directUrl);
+  if (!proxiedUrl) {
     if (!coverApplyStillCurrent(opts)) return;
     if (preserveOnSwitch && uniforms.uHasCover.value > 0.5) {
       document.getElementById('thumb-cover').removeAttribute('src');
@@ -27,15 +29,6 @@ function loadCoverFromUrl(directUrl, opts) {
     resetFloatColorsToIdle();
     setAlbumBackground('');
     document.getElementById('thumb-cover').removeAttribute('src');
-    setControlCoverSrc('');
-    return;
-  }
-  var proxiedUrl = coverProxySrc(directUrl);
-  if (!proxiedUrl) {
-    if (preserveOnSwitch && uniforms.uHasCover.value > 0.5) return;
-    uniforms.uHasCover.value = 0; setCoverDepthState(0, 0, 1);
-    resetFloatColorsToIdle();
-    setAlbumBackground('');
     setControlCoverSrc('');
     return;
   }

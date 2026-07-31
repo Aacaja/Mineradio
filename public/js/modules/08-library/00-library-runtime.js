@@ -328,6 +328,7 @@ function renderUserPlaylistsList() {
 async function refreshUserPlaylists(force) {
   try {
     var data = await apiJson('/api/library/playlists?t=' + (force ? Date.now() : ''));
+    if (data && data.error && !(data.playlists || []).length) throw new Error(data.message || data.error);
     var all = (data && data.playlists || []).map(function (pl) { return Object.assign({}, pl, { provider: pl.provider === 'local' ? 'local' : 'navidrome', source: pl.provider === 'local' ? 'local' : 'navidrome' }); });
     userPlaylists = all;
     neteasePlaylists = [];
@@ -339,10 +340,13 @@ async function refreshUserPlaylists(force) {
     setPlaylistCatalogProviderArray('navidrome', all.filter(function (pl) { return pl.provider === 'navidrome'; }));
     playlistCatalogRevision += 1;
     renderUserPlaylistsList({ animate: false });
+    if (typeof scheduleShelfRebuild === 'function') scheduleShelfRebuild('library-playlists-refresh', true);
     return data;
   } catch (error) {
     userPlaylists = [];
-    renderUserPlaylistsList();
+    var root = document.getElementById('pl-list');
+    if (root) root.innerHTML = '<div class="library-empty">歌单读取失败，请点击“刷新”重试。<br><small>' + escHtml(error && error.message || 'NAVIDROME_PLAYLISTS_FAILED') + '</small></div>';
+    if (typeof scheduleShelfRebuild === 'function') scheduleShelfRebuild('library-playlists-error', true);
     return null;
   }
 }

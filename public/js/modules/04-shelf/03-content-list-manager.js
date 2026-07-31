@@ -258,6 +258,9 @@ function makeContentListManager() {
     if (contentSource.provider === 'spotify') {
       return '/api/spotify/playlist/tracks?id=' + encodeURIComponent(contentSource.id) + '&limit=' + limit + '&offset=' + Math.max(0, offset || 0);
     }
+    if (contentSource.provider === 'navidrome' || contentSource.provider === 'local') {
+      return '/api/library/playlist/tracks?id=' + encodeURIComponent(contentSource.id) + '&limit=' + limit + '&offset=' + Math.max(0, offset || 0);
+    }
     if (contentSource.provider === 'netease') {
       return '/api/playlist/tracks?id=' + encodeURIComponent(contentSource.id) + '&limit=' + limit + '&offset=' + Math.max(0, offset || 0);
     }
@@ -704,11 +707,14 @@ function makeContentListManager() {
       var kugouPlaylistId = String(playlistId || '').indexOf('kugou:') === 0 ? String(playlistId).slice(6) : '';
       var qishuiPlaylistId = String(playlistId || '').indexOf('qishui:') === 0 ? String(playlistId).slice(7) : '';
       var spotifyPlaylistId = String(playlistId || '').indexOf('spotify:') === 0 ? String(playlistId).slice(8) : '';
+      var navidromePlaylistId = String(playlistId || '').indexOf('navidrome:') === 0 ? String(playlistId).slice(10) : '';
+      var localPlaylistId = String(playlistId || '').indexOf('local:') === 0 ? String(playlistId) : '';
       contentKind = podcastCollectionKey ? 'podcast' : 'playlist';
       contentSource = podcastCollectionKey ? null : {
-        provider: qqPlaylistId ? 'qq' : (kugouPlaylistId ? 'kugou' : (qishuiPlaylistId ? 'qishui' : (spotifyPlaylistId ? 'spotify' : 'netease'))),
-        id: qqPlaylistId || kugouPlaylistId || qishuiPlaylistId || spotifyPlaylistId || playlistId
+        provider: qqPlaylistId ? 'qq' : (kugouPlaylistId ? 'kugou' : (qishuiPlaylistId ? 'qishui' : (spotifyPlaylistId ? 'spotify' : (navidromePlaylistId ? 'navidrome' : (localPlaylistId ? 'local' : 'netease'))))),
+        id: qqPlaylistId || kugouPlaylistId || qishuiPlaylistId || spotifyPlaylistId || navidromePlaylistId || localPlaylistId || playlistId
       };
+      var libraryPlaylistId = navidromePlaylistId || localPlaylistId;
       // 拉取歌单/播客集合
       var r = null;
       try {
@@ -722,7 +728,9 @@ function makeContentListManager() {
                 ? await apiJson('/api/qishui/playlist/tracks?id=' + encodeURIComponent(qishuiPlaylistId) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE + '&offset=0')
                 : (spotifyPlaylistId
                   ? await apiJson('/api/spotify/playlist/tracks?id=' + encodeURIComponent(spotifyPlaylistId) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE + '&offset=0')
-                  : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(playlistId) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE + '&offset=0')))));
+                  : (libraryPlaylistId
+                    ? await apiJson('/api/library/playlist/tracks?id=' + encodeURIComponent(libraryPlaylistId) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE + '&offset=0')
+                    : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(playlistId) + '&limit=' + PLAYLIST_LAZY_BATCH_SIZE + '&offset=0'))))));
       } catch (e) {
         if (!open || token !== requestToken) return;
         console.warn('[ShelfContentLoadApi]', playlistId, e);
@@ -1040,9 +1048,11 @@ function makeContentListManager() {
         return cloneSong(song);
       });
       if (!allSongs.length || playIndex < 0) return;
-      var queuePlaylistId = contentSource && contentSource.provider && contentSource.provider !== 'netease'
-        ? (contentSource.provider + ':' + contentSource.id)
-        : (contentSource && contentSource.id || '');
+      var queuePlaylistId = contentSource && contentSource.provider === 'local'
+        ? contentSource.id
+        : (contentSource && contentSource.provider && contentSource.provider !== 'netease'
+          ? (contentSource.provider + ':' + contentSource.id)
+          : (contentSource && contentSource.id || ''));
       if (!queuePlaylistId) return;
       loadPlaylistIntoQueueById(queuePlaylistId, true, playlistTitle, {
         seedTracks: allSongs,

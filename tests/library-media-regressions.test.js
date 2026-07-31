@@ -112,10 +112,40 @@ function testPlainLyricsAndPlaybackProxyContract() {
   assert.match(playbackSource, /playbackProvider === 'navidrome'[\s\S]*\/api\/library\/song\/url/);
 }
 
+function testLibraryCoverAndPlaylistShelfRouting() {
+  const coverSource = fs.readFileSync(path.join(__dirname, '..', 'public/js/modules/05-playback/01-cover-custom-map.js'), 'utf8');
+  const coverContext = {};
+  vm.runInNewContext([
+    extractFunction(coverSource, 'isInlineCoverSrc'),
+    extractFunction(coverSource, 'isProxyableCoverUrl'),
+    extractFunction(coverSource, 'coverProxySrc'),
+    'globalThis.coverProxySrc = coverProxySrc;',
+  ].join('\n'), coverContext);
+  assert.equal(coverContext.coverProxySrc('/api/library/cover?id=cover-1&size=88'), '/api/library/cover?id=cover-1&size=88');
+  assert.match(coverContext.coverProxySrc('https://media.example/cover.jpg'), /^\/api\/cover\?url=/);
+
+  const coverLoaderSource = fs.readFileSync(path.join(__dirname, '..', 'public/js/modules/03-beat/05-cover-loading-crop.js'), 'utf8');
+  assert.match(coverLoaderSource, /var proxiedUrl = coverProxySrc\(directUrl\)/);
+  assert.match(coverLoaderSource, /directUrl = String\(directUrl \|\| ''\)\.trim\(\)/);
+
+  const librarySource = fs.readFileSync(path.join(__dirname, '..', 'public/js/modules/08-library/00-library-runtime.js'), 'utf8');
+  assert.match(librarySource, /scheduleShelfRebuild\('library-playlists-refresh'/);
+  assert.match(librarySource, /\/api\/library\/playlist\/tracks/);
+
+  const shelfSource = fs.readFileSync(path.join(__dirname, '..', 'public/js/modules/04-shelf/01-manager-core.js'), 'utf8');
+  const contentSource = fs.readFileSync(path.join(__dirname, '..', 'public/js/modules/04-shelf/03-content-list-manager.js'), 'utf8');
+  assert.match(shelfSource, /pl\.provider === 'navidrome'/);
+  assert.match(shelfSource, /pl\.provider === 'local'/);
+  assert.match(shelfSource, /songCoverSrc\(\{ cover: pl\.cover/);
+  assert.match(contentSource, /navidromePlaylistId/);
+  assert.match(contentSource, /\/api\/library\/playlist\/tracks/);
+}
+
 async function run() {
   await testEmbeddedLyricsExtraction();
   testPlainLyricsAndPlaybackProxyContract();
-  console.log('[OK] Navidrome same-origin playback and embedded FLAC lyric regressions verified.');
+  testLibraryCoverAndPlaylistShelfRouting();
+  console.log('[OK] Navidrome playback, embedded FLAC lyrics, cover URLs, and playlist routing regressions verified.');
 }
 
 run().catch(error => {
