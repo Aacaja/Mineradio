@@ -85,9 +85,12 @@ npm run build:win
 
 手动编译：打开仓库的 `Actions` → `Windows Build` → `Run workflow`，选择包含最新代码的分支并确认。任务完成后打开该次运行，在 `Artifacts` 下载 `Mineradio-Windows-...`，解压后运行其中的 `Mineradio-*-Setup.exe`。Artifact 默认保留 14 天。
 
-也可以在本地提交并推送一个版本标签来触发构建，例如：
+正式发布时，先把 `package.json` 和 `package-lock.json` 的版本号更新为目标版本，再提交并推送版本标签来触发构建。例如当前版本要发布为 `2.0.4` 时：
 
 ```bash
+npm version 2.0.4 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore: release 2.0.4"
 git tag v2.0.4
 git push origin v2.0.4
 ```
