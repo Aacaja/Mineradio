@@ -25,9 +25,13 @@ function serverFunctionSource(name, nextName) {
   return serverText.slice(start, end);
 }
 
-test('2.0.3 update metadata accepts only a bounded HTTPS external page', () => {
+test('A personal build disables the upstream update channel', () => {
   assert.equal(packageData.version, '2.0.3');
+  assert.equal(packageData.mineradio.update.disabled, true);
+  assert.equal(packageData.mineradio.update.provider, 'none');
   assert.equal(packageData.mineradio.update.preview, false);
+  assert.equal(packageData.build.publish, null);
+  assert.match(serverText, /if \(UPDATE_CONFIG\.disabled\) return localUpdateFallback\('UPDATE_DISABLED'\)/);
   assert.match(serverText, /function safeExternalUpdateUrl\(value\)/);
   assert.match(serverText, /raw\.length > 2048/);
   assert.match(serverText, /parsed\.protocol !== 'https:'/);
@@ -40,12 +44,16 @@ test('2.0.3 update metadata accepts only a bounded HTTPS external page', () => {
   assert.match(serverText, /patchAvailable:\s*false/);
   assert.match(htmlText, /id="update-modal-version"[^>]*>v2\.0\.3</);
   assert.match(htmlText, /id="update-download-sources"/);
+  assert.match(htmlText, /id="update-entry"[^>]*\bhidden\b/);
+  assert.match(htmlText, /id="update-modal"[^>]*\bhidden\b/);
+  assert.match(updateUiText, /var UPDATE_FEATURE_DISABLED = true/);
+  assert.match(updateUiText, /if \(UPDATE_FEATURE_DISABLED\) return;/);
 });
 
 test('removed local update routes stay disabled and their workers stay absent', () => {
   assert.match(serverText, /pn === '\/api\/update\/download'/);
   assert.match(serverText, /pn === '\/api\/update\/patch'/);
-  assert.match(serverText, /error:\s*'UPDATE_EXTERNAL_ONLY'/);
+  assert.match(serverText, /error:\s*'UPDATE_DISABLED'/);
   assert.match(serverText, /\},\s*410\);/);
   assert.doesNotMatch(serverText, /startUpdateDownloadJob/);
   assert.doesNotMatch(serverText, /startUpdatePatchJob/);

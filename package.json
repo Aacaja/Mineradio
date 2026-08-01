@@ -72,26 +72,15 @@
       "include": "build/installer.nsh",
       "artifactName": "A-${version}-Setup.${ext}"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "XxHuberrr",
-        "repo": "Mineradio"
-      }
-    ]
+    "publish": null
   },
   "mineradio": {
     "update": {
-      "provider": "github",
-      "owner": "XxHuberrr",
-      "repo": "Mineradio",
+      "disabled": true,
+      "provider": "none",
       "preview": false,
-      "preferMirrors": true,
-      "mirrors": [
-        "https://gh.llkk.cc/",
-        "https://ghfast.top/",
-        "https://gh-proxy.com/"
-      ]
+      "preferMirrors": false,
+      "mirrors": []
     }
   },
   "dependencies": {

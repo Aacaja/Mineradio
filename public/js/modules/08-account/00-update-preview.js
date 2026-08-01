@@ -1,6 +1,9 @@
 // ============================================================
-// Update preview: external download page only.
-// Mineradio no longer downloads installers or applies resource patches.
+// A personal build has no upstream update channel.
+var UPDATE_FEATURE_DISABLED = true;
+
+// Legacy external-download helpers remain inert for compatibility with old
+// saved renderer state and modal bindings; no update request or prompt starts.
 // ============================================================
 function isSafeUpdatePageUrl(value) {
   var raw = String(value || '').trim();
@@ -53,15 +56,31 @@ function currentUpdatePageUrl(preferredIndex) {
 }
 
 function initUpdatePreview() {
+  if (UPDATE_FEATURE_DISABLED) {
+    setUpdatePreviewVisible(false);
+    var entry = document.getElementById('update-entry');
+    if (entry) {
+      entry.hidden = true;
+      entry.setAttribute('aria-hidden', 'true');
+    }
+    var modal = document.getElementById('update-modal');
+    if (modal) modal.hidden = true;
+    return;
+  }
   renderUpdatePreviewPanel();
   setUpdatePreviewVisible(false);
   checkLatestUpdate();
 }
 
 function setUpdatePreviewVisible(visible) {
+  if (UPDATE_FEATURE_DISABLED) visible = false;
   updatePreviewState.visible = !!visible;
   var entry = document.getElementById('update-entry');
   if (!entry) return;
+  if (UPDATE_FEATURE_DISABLED) {
+    entry.hidden = true;
+    entry.setAttribute('aria-hidden', 'true');
+  }
   entry.classList.toggle('available', updatePreviewState.visible);
   if (!updatePreviewState.visible && window.gsap) {
     window.gsap.killTweensOf(entry);
@@ -78,6 +97,7 @@ function setUpdatePreviewVisible(visible) {
 }
 
 async function checkLatestUpdate() {
+  if (UPDATE_FEATURE_DISABLED) return;
   try {
     var data = await apiJson('/api/update/latest?t=' + Date.now());
     applyLatestUpdateInfo(data);
@@ -260,6 +280,7 @@ function updateUpdatePreviewProgress() {
 }
 
 function openUpdatePanel() {
+  if (UPDATE_FEATURE_DISABLED) return;
   var mask = document.getElementById('update-modal');
   var entry = document.getElementById('update-entry');
   if (!mask) return;
@@ -321,6 +342,7 @@ function openUpdateDownloadSource(index) {
 }
 
 async function startUpdatePreviewDownload(preferredIndex) {
+  if (UPDATE_FEATURE_DISABLED) return;
   if (updatePreviewState.status === 'opening') return;
   if (!updatePreviewState.updateAvailable) {
     showToast('当前版本已是最新');

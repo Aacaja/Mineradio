@@ -836,7 +836,9 @@ function writeBeatMapCache(body) {
 function localUpdateFallback(reason, opts) {
   opts = opts || {};
   const configured = !!(opts.configured != null ? opts.configured : false);
+  const disabled = !!UPDATE_CONFIG.disabled;
   return {
+    disabled,
     configured,
     preview: UPDATE_CONFIG.preview,
     updateAvailable: false,
@@ -854,8 +856,8 @@ function localUpdateFallback(reason, opts) {
       asset: null,
       patch: null,
       patchAvailable: false,
-      summary: '当前版本，更新检测已就绪。',
-      notes: UPDATE_FALLBACK_NOTES,
+      summary: disabled ? 'A 个人版已关闭软件内更新。' : '当前版本，更新检测已就绪。',
+      notes: disabled ? ['此版本不连接原项目的更新渠道', '请通过 GitHub Actions 手动编译新版本'] : UPDATE_FALLBACK_NOTES,
     },
     reason: reason || '',
   };
@@ -998,6 +1000,7 @@ async function fetchLatestYmlUpdateInfo(reason) {
   return parseLatestYmlUpdateInfo(result.text, reason);
 }
 async function fetchLatestUpdateInfo() {
+  if (UPDATE_CONFIG.disabled) return localUpdateFallback('UPDATE_DISABLED');
   if (UPDATE_CONFIG.manifest) return fetchManifestUpdateInfo(UPDATE_CONFIG.manifest);
   if (!UPDATE_CONFIG.configured || UPDATE_CONFIG.provider !== 'github') return localUpdateFallback();
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(UPDATE_CONFIG.owner)}/${encodeURIComponent(UPDATE_CONFIG.repo)}/releases/latest`;
@@ -5381,9 +5384,9 @@ const server = http.createServer(async (req, res) => {
   ) {
     sendJSON(res, {
       ok: false,
-      externalOnly: true,
-      error: 'UPDATE_EXTERNAL_ONLY',
-      message: 'A 已停用客户端本地下载与快速补丁，请使用外部下载页面。',
+      disabled: true,
+      error: 'UPDATE_DISABLED',
+      message: 'A 个人版已关闭软件内更新功能。',
     }, 410);
     return;
   }

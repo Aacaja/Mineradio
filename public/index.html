@@ -26,7 +26,7 @@
       <div class="desktop-window-controls">
         <button id="visual-guide-btn" class="icon-btn" type="button" onclick="startVisualGuide({ manual: true })"
           title="查看使用引导" aria-label="查看使用引导">?</button>
-        <button id="update-entry" class="update-entry" type="button" onclick="openUpdatePanel()" title="发现新版本"
+        <button id="update-entry" class="update-entry" type="button" hidden onclick="openUpdatePanel()" title="发现新版本"
           aria-label="发现新版本">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle class="update-ring" cx="12" cy="12" r="8.8"></circle>
@@ -1762,7 +1762,7 @@
       </div>
     </div>
 
-    <div id="update-modal" class="modal-mask">
+    <div id="update-modal" class="modal-mask" hidden>
       <div class="modal update-modal">
         <div class="update-panel-inner">
           <div class="update-panel-head">
