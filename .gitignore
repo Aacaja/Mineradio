@@ -68,3 +68,4 @@ screenshots/
 
 # Agent local tooling (not shipped)
 .codex/
+.pi/
