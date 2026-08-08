@@ -51,6 +51,18 @@ tests/                Node 回归测试      scripts/          Windows 诊断脚
 
 ## 进度记录区（最新在顶部）
 
+## 2026-08-08 21:10 — 修复 Bug 2/3/4：Navidrome 保存连接失败无提示、本地扫描卡死无进度、看不到日志
+
+- **问题**：① 新 Navidrome 账号测试连接通但保存后连不上，UI 只显示「已保存并切换」吞掉错误；② 选择本地文件夹/重新扫描时 IPC **等待整个扫描完成才返回**（数千文件串行 music-metadata 解析要几分钟），UI 一直卡「正在扫描…」且无进度；③ 无运行日志，用户无法排查。
+- **修复**：
+  1. **日志系统**（新增）：main.js 加 `appendAppLog()` → `userData/logs/app.log`（全局 `global.__appendAppLog` 供 server.js 用）；preload 加 `desktopWindow.log()` 转发渲染进程日志；IPC `mineradio-renderer-log` / `mineradio-open-logs-folder`；设置弹窗新增「打开日志」按钮。Navidrome 保存/激活/删除/测试/configure/status ping 失败、本地库扫描开始/完成/失败全部打日志。
+  2. **保存连接错误显示**：保存后检查 refreshLoginStatus 返回的 `navidrome.error/message`，失败时显示「已保存，但连接失败 · <具体错误>」；测试连接显示完整错误 + 服务器版本。
+  3. **扫描改后台**：choose-roots IPC 用 `{scan:false}` 保存 roots 后立即返回，rescan 不 await 扫描完成；前端轮询 `/api/library/local/status` 每 1s 显示进度（progress/total/当前文件），完成/失败后刷新歌单和首页。
+- **涉及文件**：`desktop/main.js`、`desktop/preload.js`、`server.js`、`public/js/modules/08-library/00-library-runtime.js`
+- **验证**：node --check 全部通过；library-media-regressions、login-easter-egg-gate、startup-qa、full-desktop-mode 回归测试通过。已提交推送。
+- **待验证（用户）**：重新构建 Windows 版后，重试「保存账号」和「扫描本地库」，若仍有问题，设置弹窗点「打开日志」把 `logs/app.log` 发来即可精确定位。
+
+---
 ## 2026-08-08 20:20 — 沙箱网络彻底修复 + 全部提交已推送
 
 - **真相**：用户真正的代理是自建 mihomo（`/Users/luhongquan/vscode/proxy/`，HTTP 7890 / SOCKS 7891，正在运行）；shell 里的 52024/52025 是失效残留配置（Clash Verge 实际是 7897）。此前沙箱放行 52025（空端口）而真代理 7891 被拦，导致一切对不上。

@@ -80,6 +80,7 @@ async function refreshLoginStatus(force) {
     loginStatusCheckFailed = true;
     libraryRuntimeState.status = { provider: 'library', configured: false, connected: false, local: { roots: [], trackCount: 0, playlists: [] }, error: error.message || 'LIBRARY_STATUS_FAILED' };
     loginStatus = Object.assign({}, libraryRuntimeState.status, { loggedIn: false, provider: 'library' });
+    logRenderer('library', '状态刷新失败: ' + (error && error.message || error));
     libraryRefreshStatusUi();
     return null;
   } finally {
@@ -511,6 +512,40 @@ function renderUserBtn() {
   btn.onclick = function () { openLibrarySettings(); };
 }
 
+function logRenderer(scope, message) {
+  try {
+    if (window.desktopWindow && typeof window.desktopWindow.log === 'function') window.desktopWindow.log(scope, message);
+  } catch (e) { }
+  try { console.log('[' + scope + ']', message); } catch (e) { }
+}
+
+var libraryLocalScanPollTimer = null;
+function libraryStopLocalScanPoll() {
+  if (libraryLocalScanPollTimer) { clearInterval(libraryLocalScanPollTimer); libraryLocalScanPollTimer = null; }
+}
+// Poll /api/library/local/status while a background scan is running and show
+// live progress (progress/total/current file) in the settings dialog.
+function libraryStartLocalScanPoll(statusEl) {
+  libraryStopLocalScanPoll();
+  libraryLocalScanPollTimer = setInterval(function () {
+    apiJson('/api/library/local/status?t=' + Date.now(), { timeoutMs: 5000 }).then(function (data) {
+      var scan = data && data.scan || {};
+      if (scan && scan.running) {
+        if (statusEl) statusEl.textContent = '正在扫描 ' + (Number(scan.progress) || 0) + '/' + (Number(scan.total) || 0) + (scan.current ? ' · ' + scan.current : '');
+        return;
+      }
+      libraryStopLocalScanPoll();
+      libraryRuntimeState.status = Object.assign({}, libraryRuntimeState.status || {}, { local: data || {} });
+      renderLibrarySettings();
+      if (statusEl) statusEl.textContent = '扫描完成 · ' + (Number(data && data.trackCount) || 0) + ' 首' + ((scan && scan.error) ? ' · 错误: ' + scan.error : '');
+      refreshUserPlaylists(true);
+      loadHomeDiscover(true);
+    }).catch(function (error) {
+      logRenderer('local-library', 'scan status poll failed: ' + (error && error.message || error));
+    });
+  }, 1000);
+}
+
 function ensureLibrarySettingsModal() {
   var existing = document.getElementById('library-settings-modal');
   if (existing) return existing;
@@ -523,7 +558,7 @@ function ensureLibrarySettingsModal() {
     '<section class="library-settings-section"><div class="library-settings-section-head"><b>Navidrome 账号</b><button class="fx-mini-btn ghost" type="button" data-library-add>新增账号</button></div><div id="library-profile-list"></div>' +
     '<div class="library-profile-editor" id="library-profile-editor"><label>名称<input id="library-profile-name" type="text" autocomplete="off"></label><label>服务器地址<input id="library-profile-url" type="url" placeholder="https://music.example.com" autocomplete="url"></label><label>用户名<input id="library-profile-username" type="text" autocomplete="username"></label><label>密码<input id="library-profile-password" type="password" autocomplete="current-password" placeholder="仅保存到系统安全存储"></label><div class="library-settings-actions"><button class="modal-btn" type="button" data-library-test>测试连接</button><button class="modal-btn primary" type="button" data-library-save>保存并切换</button></div><div id="library-profile-status" class="library-settings-status" role="status"></div></div></section>' +
     '<section class="library-settings-section"><div class="library-settings-section-head"><b>本地音乐文件夹</b><span id="library-local-count" class="library-settings-muted"></span></div><p class="library-settings-help">递归扫描 MP3、FLAC、M4A、OGG、WAV 等文件，读取标签、内嵌封面和同目录 LRC。</p><div id="library-root-list" class="library-root-list"></div><div class="library-settings-actions"><button class="modal-btn" type="button" data-library-choose-roots>选择文件夹</button><button class="modal-btn" type="button" data-library-rescan>重新扫描</button></div><div id="library-local-status" class="library-settings-status" role="status"></div></section>' +
-    '</div><div class="btn-row"><button class="modal-btn" type="button" data-library-close>完成</button></div></div>';
+    '</div><div class="btn-row"><button class="modal-btn" type="button" data-library-open-logs>打开日志</button><button class="modal-btn" type="button" data-library-close>完成</button></div></div>';
   document.body.appendChild(mask);
   mask.addEventListener('click', function (event) { if (event.target === mask || event.target.closest('[data-library-close]')) closeLibrarySettings(); });
   mask.querySelector('[data-library-add]').addEventListener('click', function () { librarySettingsNewProfile(); });
@@ -531,6 +566,15 @@ function ensureLibrarySettingsModal() {
   mask.querySelector('[data-library-save]').addEventListener('click', function () { librarySettingsSaveProfile(); });
   mask.querySelector('[data-library-choose-roots]').addEventListener('click', function () { librarySettingsChooseRoots(); });
   mask.querySelector('[data-library-rescan]').addEventListener('click', function () { librarySettingsRescan(); });
+  mask.querySelector('[data-library-open-logs]').addEventListener('click', function () {
+    if (window.desktopWindow && typeof window.desktopWindow.openLogsFolder === 'function') {
+      window.desktopWindow.openLogsFolder().then(function (result) {
+        if (!result || !result.ok) showToast((result && result.error) || '无法打开日志文件夹');
+      });
+    } else {
+      showToast('当前环境不是 Electron 桌面版');
+    }
+  });
   return mask;
 }
 function openLibrarySettings() {
@@ -570,12 +614,76 @@ async function librarySettingsLoadProfiles() {
 }
 function librarySettingsNewProfile() { libraryRuntimeState.activeProfileId = ''; ['name', 'url', 'username', 'password'].forEach(function (key) { var node = document.getElementById('library-profile-' + key); if (node) node.value = ''; }); var status = document.getElementById('library-profile-status'); if (status) status.textContent = '填写新的 Navidrome 账号'; }
 function librarySettingsEdit(id) { var profile = libraryRuntimeState.profiles.filter(function (item) { return item.id === id; })[0]; if (!profile) return; libraryRuntimeState.activeProfileId = id; ['name', 'url', 'username'].forEach(function (key) { var node = document.getElementById('library-profile-' + key); if (node) node.value = profile[key] || ''; }); var pass = document.getElementById('library-profile-password'); if (pass) pass.value = ''; var status = document.getElementById('library-profile-status'); if (status) status.textContent = '密码留空表示沿用已保存凭据'; }
-async function librarySettingsTestProfile() { var status = document.getElementById('library-profile-status'); if (status) status.textContent = '正在连接…'; var result = window.desktopWindow && await window.desktopWindow.testNavidromeProfile(currentLibraryProfileDraft()); if (status) status.textContent = result && result.ok ? '连接成功 · Navidrome 可用' : ('连接失败 · ' + (result && (result.message || result.error) || '请检查地址、账号和密码')); }
-async function librarySettingsSaveProfile() { var draft = currentLibraryProfileDraft(); var status = document.getElementById('library-profile-status'); if (status) status.textContent = '正在保存…'; if (!window.desktopWindow || typeof window.desktopWindow.saveNavidromeProfile !== 'function') { if (status) status.textContent = '当前环境不是 Electron 桌面版'; return; } var result = await window.desktopWindow.saveNavidromeProfile(Object.assign({}, draft, { activate: true })); if (!result || !result.ok) { if (status) status.textContent = result && (result.message || result.error) || '保存失败'; return; } libraryRuntimeState.profiles = result.profiles || []; libraryRuntimeState.activeProfileId = result.activeId || draft.id; await refreshLoginStatus(true); renderLibrarySettings(); if (status) status.textContent = '已保存并切换'; }
+async function librarySettingsTestProfile() {
+  var status = document.getElementById('library-profile-status');
+  if (status) status.textContent = '正在连接…';
+  var result = window.desktopWindow && await window.desktopWindow.testNavidromeProfile(currentLibraryProfileDraft());
+  if (status) {
+    if (result && result.ok) {
+      logRenderer('navidrome', '测试连接成功');
+      status.textContent = '连接成功 · Navidrome ' + ((result.ping && result.ping.serverVersion) || '可用');
+    } else {
+      logRenderer('navidrome', '测试连接失败: ' + (result && (result.error || result.message) || '未知错误'));
+      status.textContent = '连接失败 · ' + (result && (result.message || result.error) || '请检查地址、账号和密码');
+    }
+  }
+}
+async function librarySettingsSaveProfile() {
+  var draft = currentLibraryProfileDraft();
+  var status = document.getElementById('library-profile-status');
+  if (status) status.textContent = '正在保存…';
+  if (!window.desktopWindow || typeof window.desktopWindow.saveNavidromeProfile !== 'function') { if (status) status.textContent = '当前环境不是 Electron 桌面版'; return; }
+  var result = await window.desktopWindow.saveNavidromeProfile(Object.assign({}, draft, { activate: true }));
+  if (!result || !result.ok) {
+    logRenderer('navidrome', '保存失败: ' + (result && (result.error || result.message) || '未知错误'));
+    if (status) status.textContent = '保存失败 · ' + (result && (result.message || result.error) || '未知错误');
+    return;
+  }
+  logRenderer('navidrome', '保存成功: ' + draft.url + ' user=' + draft.username);
+  libraryRuntimeState.profiles = result.profiles || [];
+  libraryRuntimeState.activeProfileId = result.activeId || draft.id;
+  var refresh = await refreshLoginStatus(true);
+  renderLibrarySettings();
+  if (status) {
+    var nav = refresh && refresh.navidrome || {};
+    if (refresh && refresh.connected) status.textContent = '已保存并连接成功';
+    else if (nav && nav.error) status.textContent = '已保存，但连接失败 · ' + (nav.message || nav.error);
+    else status.textContent = '已保存并切换';
+  }
+}
 async function librarySettingsActivate(id) { var result = window.desktopWindow && await window.desktopWindow.activateNavidromeProfile(id); if (result && result.ok) { libraryRuntimeState.profiles = result.profiles || []; libraryRuntimeState.activeProfileId = result.activeId || id; await refreshLoginStatus(true); renderLibrarySettings(); } }
 async function librarySettingsDelete(id) { if (!confirm('删除这个 Navidrome 账号配置？')) return; var result = window.desktopWindow && await window.desktopWindow.deleteNavidromeProfile(id); if (result && result.ok) { libraryRuntimeState.profiles = result.profiles || []; libraryRuntimeState.activeProfileId = result.activeId || ''; await refreshLoginStatus(true); renderLibrarySettings(); } }
-async function librarySettingsChooseRoots() { var status = document.getElementById('library-local-status'); if (status) status.textContent = '正在扫描…'; var result = window.desktopWindow && await window.desktopWindow.chooseLocalLibraryRoots(); if (result && result.ok) { libraryRuntimeState.status = Object.assign({}, libraryRuntimeState.status, { local: result.status }); await refreshUserPlaylists(true); await loadHomeDiscover(true); renderLibrarySettings(); if (status) status.textContent = '扫描完成 · ' + (result.status.trackCount || 0) + ' 首'; } else if (status && !(result && result.canceled)) status.textContent = result && (result.error || result.message) || '选择文件夹失败'; }
-async function librarySettingsRescan() { var status = document.getElementById('library-local-status'); if (status) status.textContent = '正在重新扫描…'; var result = window.desktopWindow && await window.desktopWindow.rescanLocalLibrary(true); if (result && result.ok) { libraryRuntimeState.status = Object.assign({}, libraryRuntimeState.status, { local: result.status }); await refreshUserPlaylists(true); await loadHomeDiscover(true); renderLibrarySettings(); if (status) status.textContent = '扫描完成 · ' + (result.status.trackCount || 0) + ' 首'; } else if (status) status.textContent = result && (result.error || result.message) || '扫描失败'; }
+async function librarySettingsChooseRoots() {
+  var status = document.getElementById('library-local-status');
+  if (!window.desktopWindow || typeof window.desktopWindow.chooseLocalLibraryRoots !== 'function') { if (status) status.textContent = '当前环境不是 Electron 桌面版'; return; }
+  var result = await window.desktopWindow.chooseLocalLibraryRoots();
+  if (result && result.ok) {
+    logRenderer('local-library', '选择文件夹成功: ' + (result.paths || []).length + ' 个，开始后台扫描');
+    libraryRuntimeState.status = Object.assign({}, libraryRuntimeState.status || {}, { local: result.status || {} });
+    renderLibrarySettings();
+    if (status) status.textContent = '已选择 ' + (result.paths || []).length + ' 个文件夹，正在后台扫描…';
+    libraryStartLocalScanPoll(status);
+  } else if (status && !(result && result.canceled)) {
+    logRenderer('local-library', '选择文件夹失败: ' + (result && (result.error || result.message) || '未知错误'));
+    status.textContent = '选择文件夹失败 · ' + (result && (result.error || result.message) || '未知错误');
+  }
+}
+async function librarySettingsRescan() {
+  var status = document.getElementById('library-local-status');
+  if (!window.desktopWindow || typeof window.desktopWindow.rescanLocalLibrary !== 'function') { if (status) status.textContent = '当前环境不是 Electron 桌面版'; return; }
+  if (status) status.textContent = '正在触发扫描…';
+  var result = await window.desktopWindow.rescanLocalLibrary(true);
+  if (result && result.ok) {
+    logRenderer('local-library', '重新扫描已触发');
+    libraryRuntimeState.status = Object.assign({}, libraryRuntimeState.status || {}, { local: result.status || {} });
+    renderLibrarySettings();
+    if (status) status.textContent = '正在扫描…';
+    libraryStartLocalScanPoll(status);
+  } else if (status) {
+    logRenderer('local-library', '重新扫描失败: ' + (result && (result.error || result.message) || '未知错误'));
+    status.textContent = '扫描失败 · ' + (result && (result.error || result.message) || '未知错误');
+  }
+}
 
 function songAccountProvider(song) { return libraryProvider(song); }
 function playlistAccountProvider(playlist) { return libraryProvider(playlist); }

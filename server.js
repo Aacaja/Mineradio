@@ -4698,6 +4698,8 @@ async function handleLibraryStatus() {
     } catch (error) {
       remote.error = error.code || error.message || 'NAVIDROME_UNAVAILABLE';
       remote.message = error.message || 'Navidrome 暂时不可用';
+      const log = typeof global.__appendAppLog === 'function' ? global.__appendAppLog : null;
+      if (log) log('navidrome', `status ping failed: ${profile.url || ''} user=${profile.username || ''} code=${remote.error} message=${remote.message}`);
     }
   }
   return {
@@ -7243,6 +7245,8 @@ server.listen(PORT, HOST, () => {
 server.clearAllLoginCredentials = clearAllRuntimeLoginCredentials;
 server.configureNavidrome = (profile) => {
   navidromeClient = new NavidromeClient(profile || {});
+  const log = typeof global.__appendAppLog === 'function' ? global.__appendAppLog : null;
+  if (log) log('navidrome', `server configure: ${navidromeClient.config.url || ''} user=${navidromeClient.config.username || ''} configured=${navidromeClient.configured}`);
   return navidromeClient.publicConfig;
 };
 server.getNavidromeConfig = () => navidromeClient.publicConfig;

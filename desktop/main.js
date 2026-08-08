@@ -114,6 +114,8 @@ const CURRENT_FX_AUTOSAVE_FILE = 'current-fx-autosave.json';
 const CURRENT_FX_AUTOSAVE_MAX_BYTES = 12 * 1024 * 1024;
 const STARTUP_ERROR_LOG_FILE = 'startup-error.log';
 const STARTUP_STATE_FILE = 'startup-state.json';
+const APP_LOG_DIR = 'logs';
+const APP_LOG_FILE = 'app.log';
 const STARTUP_SERVER_TIMEOUT_MS = 10000;
 const STARTUP_HTTP_TIMEOUT_MS = 8000;
 const STARTUP_NAVIGATION_TIMEOUT_MS = 15000;
@@ -489,6 +491,7 @@ function configureRuntimeNavidromeProfile(profile) {
   if (localServer && typeof localServer.configureNavidrome === 'function') {
     localServer.configureNavidrome(normalized);
   }
+  appendAppLog('navidrome', `runtime profile <- ${normalized.name || ''} ${normalized.url || ''} user=${normalized.username || ''} configured=${!!(normalized.url && normalized.username && (normalized.password || normalized.token || normalized.apiKey))}`);
   return publicNavidromeConfig(normalized);
 }
 
@@ -511,6 +514,7 @@ function saveNavidromeProfile(payload) {
   if (!normalized.url || !normalized.username) {
     const error = new Error('请填写 Navidrome 地址和用户名');
     error.code = 'NAVIDROME_PROFILE_INCOMPLETE';
+    appendAppLog('navidrome', `save failed (incomplete): ${normalized.url || ''} user=${normalized.username || ''}`);
     throw error;
   }
   const secretInput = {
@@ -522,6 +526,7 @@ function saveNavidromeProfile(payload) {
   if (!secretInput.password && !secretInput.token && !secretInput.apiKey) {
     const error = new Error('请填写 Navidrome 密码、Token 或 API Key');
     error.code = 'NAVIDROME_SECRET_REQUIRED';
+    appendAppLog('navidrome', `save failed (secret required): ${normalized.url || ''} user=${normalized.username || ''}`);
     throw error;
   }
   const record = Object.assign({}, normalized, { secret: encryptNavidromeSecret(secretInput) });
@@ -536,6 +541,7 @@ function saveNavidromeProfile(payload) {
   writeNavidromeProfilesState(state);
   const active = state.profiles.find(item => item.id === state.activeId);
   if (active) configureRuntimeNavidromeProfile(navidromeProfileWithSecret(active));
+  appendAppLog('navidrome', `saved profile ${existing ? '(update)' : '(new)'}: id=${record.id} ${record.url || ''} user=${record.username || ''} secret=${!!record.secret}`);
   return publicNavidromeProfiles();
 }
 
@@ -545,11 +551,13 @@ function activateNavidromeProfile(profileId) {
   if (!state.profiles.some(item => item.id === id)) {
     const error = new Error('Navidrome 账号不存在');
     error.code = 'NAVIDROME_PROFILE_NOT_FOUND';
+    appendAppLog('navidrome', `activate failed (not found): ${id}`);
     throw error;
   }
   state.activeId = id;
   writeNavidromeProfilesState(state);
   configureRuntimeNavidromeProfile(navidromeProfileWithSecret(state.profiles.find(item => item.id === id)));
+  appendAppLog('navidrome', `activated profile: ${id}`);
   return publicNavidromeProfiles();
 }
 
@@ -562,6 +570,7 @@ function deleteNavidromeProfile(profileId) {
   if (state.activeId === id) state.activeId = state.profiles[0] && state.profiles[0].id || '';
   writeNavidromeProfilesState(state);
   applyActiveNavidromeProfile();
+  appendAppLog('navidrome', `deleted profile: ${id}, new activeId: ${state.activeId || '(none)'}`);
   return publicNavidromeProfiles();
 }
 
@@ -2345,6 +2354,22 @@ function startupErrorLogPath() {
     return path.join(__dirname, '..', STARTUP_ERROR_LOG_FILE);
   }
 }
+
+function appendAppLog(scope, message) {
+  try {
+    const dir = path.join(app.getPath('userData'), APP_LOG_DIR);
+    const file = path.join(dir, APP_LOG_FILE);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(file, `${new Date().toISOString()} [${String(scope || 'main')}] ${String(message || '')}\n`, 'utf8');
+    return file;
+  } catch (e) {
+    console.warn('[AppLog] write failed:', e && e.message || e);
+    return '';
+  }
+}
+// Expose the app log writer to the bundled local server (same process) so
+// Navidrome/library failures land in the same rotating-free log file.
+global.__appendAppLog = appendAppLog;
 
 function writeStartupState(phase, detail = {}) {
   try {
@@ -5496,8 +5521,10 @@ ipcMain.handle('mineradio-navidrome-test-profile', async (event, payload) => {
     }));
     const client = new NavidromeClient(profile, { timeoutMs: 9000 });
     const ping = await client.ping();
+    appendAppLog('navidrome', `test ok: ${profile.url || ''} user=${profile.username || ''} version=${ping.serverVersion || '?'}`);
     return { ok: true, ping };
   } catch (error) {
+    appendAppLog('navidrome', `test failed: ${String(payload && payload.url || '')} error=${error.code || ''} message=${error.message || error}`);
     return { ok: false, error: error.code || error.message || 'NAVIDROME_TEST_FAILED', message: error.message };
   }
 });
@@ -5512,9 +5539,22 @@ ipcMain.handle('mineradio-local-library-choose-roots', async (event) => {
     });
     if (result.canceled || !result.filePaths || !result.filePaths.length) return { ok: false, canceled: true };
     if (!localServer || typeof localServer.setLocalLibraryRoots !== 'function') return { ok: false, error: 'LOCAL_SERVER_NOT_READY' };
-    const status = await localServer.setLocalLibraryRoots(result.filePaths, { force: false });
+    // Save the roots immediately; the full scan runs in the background so the
+    // dialog returns right away and the renderer polls scan progress.
+    const status = await localServer.setLocalLibraryRoots(result.filePaths, { scan: false });
+    const library = localServer && typeof localServer.getLocalLibrary === 'function' ? localServer.getLocalLibrary() : null;
+    if (library && typeof library.scan === 'function') {
+      const scanPromise = library.scan({ force: false });
+      scanPromise.then((scanStatus) => {
+        appendAppLog('local-library', `background scan finished: ${scanStatus && scanStatus.trackCount || 0} tracks (${scanStatus && scanStatus.scan && scanStatus.scan.added || 0} added, ${scanStatus && scanStatus.scan && scanStatus.scan.removed || 0} removed)`);
+      }).catch((scanError) => {
+        appendAppLog('local-library', `background scan failed: ${scanError && scanError.message || scanError}`);
+      });
+    }
+    appendAppLog('local-library', `roots chosen: ${result.filePaths.length} folder(s), starting background scan`);
     return { ok: true, paths: result.filePaths, status };
   } catch (error) {
+    appendAppLog('local-library', `choose roots failed: ${error.code || ''} ${error.message || error}`);
     return { ok: false, error: error.code || error.message || 'LOCAL_LIBRARY_CHOOSE_FAILED' };
   }
 });
@@ -5524,8 +5564,36 @@ ipcMain.handle('mineradio-local-library-rescan', async (event, force) => {
   try {
     const library = localServer && typeof localServer.getLocalLibrary === 'function' ? localServer.getLocalLibrary() : null;
     if (!library) return { ok: false, error: 'LOCAL_SERVER_NOT_READY' };
-    return { ok: true, status: await library.scan({ force: !!force }) };
-  } catch (error) { return { ok: false, error: error.code || error.message || 'LOCAL_LIBRARY_RESCAN_FAILED' }; }
+    // Do not await the full scan here: it can take minutes for large folders.
+    // Return immediately and let the renderer poll /api/library/local/status.
+    const scanPromise = library.scan({ force: !!force });
+    scanPromise.then((scanStatus) => {
+      appendAppLog('local-library', `rescan finished: ${scanStatus && scanStatus.trackCount || 0} tracks (${scanStatus && scanStatus.scan && scanStatus.scan.added || 0} added, ${scanStatus && scanStatus.scan && scanStatus.scan.removed || 0} removed)`);
+    }).catch((scanError) => {
+      appendAppLog('local-library', `rescan failed: ${scanError && scanError.message || scanError}`);
+    });
+    appendAppLog('local-library', `rescan triggered (force=${!!force})`);
+    return { ok: true, status: library.status(), started: true };
+  } catch (error) {
+    appendAppLog('local-library', `rescan trigger failed: ${error.code || ''} ${error.message || error}`);
+    return { ok: false, error: error.code || error.message || 'LOCAL_LIBRARY_RESCAN_FAILED' };
+  }
+});
+
+ipcMain.on('mineradio-renderer-log', (event, payload) => {
+  appendAppLog(payload && payload.scope || 'renderer', payload && payload.message || '');
+});
+
+ipcMain.handle('mineradio-open-logs-folder', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
+  try {
+    const dir = path.join(app.getPath('userData'), APP_LOG_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    const opened = await shell.openPath(dir);
+    return opened ? { ok: false, error: opened } : { ok: true, dir };
+  } catch (error) {
+    return { ok: false, error: error.message || 'OPEN_LOGS_FAILED' };
+  }
 });
 
 ipcMain.on('mineradio-current-fx-autosave-read-sync', (event) => {

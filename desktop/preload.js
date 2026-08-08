@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   readText: () => ({ ok: true, text: clipboard.readText() || '' }),
   exportJsonFile: (payload) => ipcRenderer.invoke('mineradio-export-json-file', payload || {}),
   exportLoginCookie: (provider) => ipcRenderer.invoke('mineradio-export-login-cookie', provider || ''),
+  log: (scope, message) => ipcRenderer.send('mineradio-renderer-log', { scope: String(scope || 'renderer'), message: String(message || ''), at: Date.now() }),
+  openLogsFolder: () => ipcRenderer.invoke('mineradio-open-logs-folder'),
   importJsonFile: () => ipcRenderer.invoke('mineradio-import-json-file'),
   getNavidromeProfiles: () => ipcRenderer.invoke('mineradio-navidrome-profiles'),
   saveNavidromeProfile: (payload) => ipcRenderer.invoke('mineradio-navidrome-save-profile', payload || {}),
