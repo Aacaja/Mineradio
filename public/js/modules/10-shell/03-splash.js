@@ -652,7 +652,7 @@ function markSplashReadyToEnter() {
   s.setAttribute('aria-label', '点击进入 A');
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+function bindSplashDomReady() {
   var s = document.getElementById('splash');
   if (!s) return;
   markAppPerf('dom-content-loaded');
@@ -681,4 +681,12 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   playMineradioIntroSound();
   splashTimer = setTimeout(markSplashReadyToEnter, 1500);
-});
+}
+// The module loader (js/index-loader.js) now downloads modules asynchronously
+// so the window navigation can finish promptly.  Guard the DOMContentLoaded
+// registration against late execution: if the event already fired while this
+// module was still downloading, run the initializer directly instead of
+// registering a listener that would never fire (and must not double-run when
+// the loader emits its compensating DOMContentLoaded event).
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindSplashDomReady, { once: true });
+else bindSplashDomReady();

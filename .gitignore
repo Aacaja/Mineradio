@@ -65,3 +65,6 @@ tmp/
 *.png.tmp
 verification/
 screenshots/
+
+# Agent local tooling (not shipped)
+.codex/

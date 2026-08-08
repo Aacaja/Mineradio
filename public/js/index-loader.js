@@ -1,6 +1,25 @@
 'use strict';
 
 (function loadMineradioIndexModules() {
+  // Module loader v2: async ordered loading.
+  //
+  // The previous loader fetched every module with a synchronous XMLHttpRequest
+  // and executed them as one concatenated script.  A synchronous XHR blocks the
+  // renderer main thread, so when the local gateway answered slowly (cold
+  // Windows start, antivirus scanning, busy event loop) the page `load` event
+  // never fired and the main window navigation in desktop/main.js timed out
+  // (MR-BOOT-WINDOW-LOAD).  This version appends real <script> tags in order
+  // (async=false keeps execution order), never blocks parsing, lets `load`
+  // fire promptly, and tolerates a single slow/failed module by retrying it
+  // once before continuing.
+  //
+  // Execution order is preserved by `script.async = false` on dynamically
+  // inserted scripts.  Modules that initialized on DOMContentLoaded are
+  // defensive about `document.readyState` (see modules like
+  // 08-library/00-library-runtime.js); if the browser already fired
+  // DOMContentLoaded while modules were still downloading, this loader emits a
+  // compensating DOMContentLoaded event once so those initializers still run.
+
   const moduleCacheBust = String(Date.now());
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
@@ -109,19 +128,68 @@
     'js/modules/11-main-loop.js',
   ];
 
-  function readModule(path) {
-    const request = new XMLHttpRequest();
-    request.open('GET', path + (path.indexOf('?') >= 0 ? '&' : '?') + 'v=' + moduleCacheBust, false);
-    request.send(null);
+  const state = {
+    total: modulePaths.length,
+    loaded: 0,
+    failed: [],
+    startedAt: Date.now(),
+    finishedAt: 0,
+    ok: false,
+  };
+  try { window.__mineradioModuleLoader = state; } catch (_) {}
 
-    if ((request.status < 200 || request.status >= 300) && request.status !== 0) {
-      throw new Error('Failed to load A module: ' + path + ' (' + request.status + ')');
-    }
-
-    return request.responseText;
+  function urlFor(path) {
+    return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'v=' + moduleCacheBust;
   }
 
-  const script = document.createElement('script');
-  script.text = modulePaths.map(readModule).join('') + '\n//# sourceURL=mineradio-index-modules.js\n';
-  document.currentScript.parentNode.insertBefore(script, document.currentScript.nextSibling);
+  function loadModule(path) {
+    return new Promise((resolve) => {
+      let settled = false;
+      function finish() {
+        if (settled) return;
+        settled = true;
+        state.loaded += 1;
+        resolve();
+      }
+      function append(src, retried) {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        script.onload = finish;
+        script.onerror = () => {
+          // Retry state lives in the closure, not on the element: a retry
+          // appends a brand-new <script> whose attributes start empty.
+          if (!retried) {
+            console.warn('[IndexLoader] retrying module:', path);
+            append(src, true);
+            return;
+          }
+          state.failed.push(path);
+          console.error('[IndexLoader] module failed after retry:', path);
+          finish();
+        };
+        document.head.appendChild(script);
+      }
+      append(urlFor(path), false);
+    });
+  }
+
+  (async function run() {
+    for (let index = 0; index < modulePaths.length; index += 1) {
+      await loadModule(modulePaths[index]);
+    }
+    state.finishedAt = Date.now();
+    state.ok = state.failed.length === 0;
+    console.log('[IndexLoader] loaded ' + state.loaded + '/' + state.total + ' modules in ' + (state.finishedAt - state.startedAt) + 'ms' + (state.failed.length ? ', failed: ' + state.failed.join(', ') : ''));
+    // Compensating DOMContentLoaded: when module downloads outlasted the
+    // parser, readyState is already past 'loading' and initializers that were
+    // registered for DOMContentLoaded would never run.  Modules are defensive
+    // (readyState checks / once listeners), so re-dispatching here only wakes
+    // up listeners that missed the real event.
+    if (document.readyState !== 'loading') {
+      try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (_) {}
+    }
+  })().catch((error) => {
+    console.error('[IndexLoader] fatal loader error:', error && error.message || error);
+  });
 })();

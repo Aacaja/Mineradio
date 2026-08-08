@@ -117,6 +117,13 @@ const STARTUP_STATE_FILE = 'startup-state.json';
 const STARTUP_SERVER_TIMEOUT_MS = 10000;
 const STARTUP_HTTP_TIMEOUT_MS = 8000;
 const STARTUP_NAVIGATION_TIMEOUT_MS = 15000;
+// Extra patience window after the initial navigation timeout.  The renderer
+// loads ~90 module scripts after the document finishes; on cold Windows starts
+// (antivirus scanning, slow disks) the navigation can outlive the first
+// timeout while still making progress.  Killing it with webContents.stop()
+// immediately used to turn the second attempt into ERR_FAILED.  Instead we
+// wait out this grace period and only then tear the load down.
+const STARTUP_NAVIGATION_GRACE_MS = 8000;
 const STARTUP_SHOW_WATCHDOG_MS = 3500;
 const CACHE_SETTINGS_FILE = 'cache-settings.json';
 const NAVIDROME_PROFILES_FILE = 'navidrome-profiles.json';
@@ -6013,11 +6020,93 @@ function showMainWindowSafely(win, reason) {
   return true;
 }
 
+function probeLocalHttpOnce(port, timeoutMs) {
+  return new Promise((resolve) => {
+    let probe;
+    try {
+      probe = http.get({ host: '127.0.0.1', port, path: '/', timeout: Math.max(300, Number(timeoutMs) || 1200) }, (response) => {
+        response.resume();
+        resolve(true);
+      });
+    } catch (_) {
+      resolve(false);
+      return;
+    }
+    probe.once('timeout', () => {
+      try { probe.destroy(); } catch (_) {}
+      resolve(false);
+    });
+    probe.once('error', () => resolve(false));
+  });
+}
+
+// Navigate with an event-driven timeout instead of relying on the loadURL
+// promise alone.  did-finish-load is the success signal; did-fail-load is the
+// failure signal.  When the initial timeout elapses the load is kept alive for
+// one grace period (cold-start renderer may still be executing its module
+// payload) before it is torn down, which prevents the old stop()-then-reload
+// loop from turning a slow-but-healthy start into ERR_FAILED.
+function loadMainWindowUrlWithGrace(win, targetUrl, timeoutMs, graceMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let finishedLoad = false;
+    let timeoutTimer = null;
+    let graceTimer = null;
+    const cleanup = () => {
+      clearTimeout(timeoutTimer);
+      clearTimeout(graceTimer);
+      win.webContents.removeListener('did-finish-load', onFinishLoad);
+      win.webContents.removeListener('did-fail-load', onFailLoad);
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(targetUrl);
+    };
+    const onFinishLoad = () => {
+      finishedLoad = true;
+      finish();
+    };
+    const onFailLoad = (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return; // -3 = ERR_ABORTED (expected on stop()/reload)
+      const error = new Error(`${errorDescription || 'ERR_FAILED'} (${errorCode}) loading '${validatedURL || targetUrl}'`);
+      error.code = String(errorCode || 'ERR_FAILED');
+      finish(error);
+    };
+    win.webContents.on('did-finish-load', onFinishLoad);
+    win.webContents.on('did-fail-load', onFailLoad);
+    timeoutTimer = setTimeout(() => {
+      if (settled) return;
+      if (finishedLoad) {
+        finish();
+        return;
+      }
+      // Keep the in-flight load alive for the grace period; do not stop() yet.
+      graceTimer = setTimeout(() => {
+        if (settled) return;
+        const error = new Error(`loadURL attempt timed out after ${Number(timeoutMs) || STARTUP_NAVIGATION_TIMEOUT_MS + Number(graceMs) || 0}ms`);
+        error.code = 'MINERADIO_NAVIGATION_TIMEOUT';
+        try { win.webContents.stop(); } catch (_) {}
+        finish(error);
+      }, Math.max(0, Number(graceMs) || 0));
+    }, Math.max(1000, Number(timeoutMs) || STARTUP_NAVIGATION_TIMEOUT_MS));
+    win.loadURL(targetUrl).catch((error) => {
+      // loadURL can reject without a did-fail-load event; do not swallow it.
+      if (settled) return;
+      if (/ERR_ABORTED/i.test(String(error && error.message || ''))) return;
+      finish(error);
+    });
+  });
+}
+
 async function loadMainWindowWithRetry(win) {
   const port = mainServerPort || process.env.PORT || 3000;
   const baseUrl = `http://127.0.0.1:${port}`;
+  const maxAttempts = 3;
   let lastError = null;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     if (!win || win.isDestroyed()) throw new Error('Main BrowserWindow was destroyed before navigation');
     const targetUrl = `${baseUrl}/?startupAttempt=${attempt}&startupAt=${Date.now()}`;
     try {
@@ -6027,19 +6116,20 @@ async function loadMainWindowWithRetry(win) {
         injected.code = 'MINERADIO_STARTUP_QA_INJECTED';
         throw injected;
       }
-      await withStartupTimeout(
-        win.loadURL(targetUrl),
-        STARTUP_NAVIGATION_TIMEOUT_MS,
-        `loadURL attempt ${attempt}`,
-        () => { try { win.webContents.stop(); } catch (_) {} },
-      );
+      await loadMainWindowUrlWithGrace(win, targetUrl, STARTUP_NAVIGATION_TIMEOUT_MS, STARTUP_NAVIGATION_GRACE_MS);
       return targetUrl;
     } catch (error) {
       lastError = error;
-      writeStartupState('navigation-retry', { navigationAttempt: attempt, retryAt: Date.now(), lastNavigationError: String(error && error.message || error) });
-      console.warn(`[StartupWindow] navigation attempt ${attempt} failed:`, error.message || error);
+      const serverAlive = await probeLocalHttpOnce(port, 1200);
+      writeStartupState('navigation-retry', {
+        navigationAttempt: attempt,
+        retryAt: Date.now(),
+        serverAlive,
+        lastNavigationError: String(error && error.message || error),
+      });
+      console.warn(`[StartupWindow] navigation attempt ${attempt} failed:`, error.message || error, serverAlive ? '(local server healthy)' : '(local server unreachable)');
       try { win.webContents.stop(); } catch (_) {}
-      if (attempt < 2) await startupDelay(500);
+      if (attempt < maxAttempts) await startupDelay(serverAlive ? 800 : 250);
     }
   }
   const error = new Error(`loadURL failed after retry: ${startupErrorText(lastError)}`);
